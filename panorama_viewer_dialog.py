@@ -25,6 +25,8 @@
 # -*- coding: utf-8 -*-
 
 import os
+import json 
+import math 
 import requests
 
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -32,9 +34,10 @@ from urllib.parse import urlparse
 
 from qgis.utils import iface
 from qgis._core import *
+from qgis._gui import *
 
 
-from PyQt5.QtWebKitWidgets import QWebView
+from PyQt5.QtWebKitWidgets import QWebView, QWebPage
 from PyQt5 import *
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import (
@@ -51,16 +54,36 @@ from PyQt5.QtWidgets import (
     QMainWindow,
     QSizePolicy,
     QStyle,
-    QLabel,
+    QLabel
 )
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
+
+# taken from @lepetitchu's comment here https://github.com/pavelpereverzev/panorama_viewer/issues/2#issuecomment-2771276606
+from PyQt5.QtGui import QSurfaceFormat
+# maybe placed in the constructor of widget
+format = QSurfaceFormat()
+format.setProfile(QSurfaceFormat.CompatibilityProfile)
+QSurfaceFormat.setDefaultFormat(format)
 
 
 base_folder = os.path.dirname(os.path.realpath(__file__))
 # base_folder =  r'C:\Users\Pereverzev.PV\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\panorama_viewer'
 
 HOST, PORT = "", 8030
+
+def circle_geom(pnt, w, h):
+    # форма круга для раструба панорамы
+
+    list_circle =[]
+    for i in range(0,36):
+        an =math.radians(i * 10)
+        np_x = pnt.x() + (w* math.sin(an))
+        np_y = pnt.y() + (h* math.cos(an))
+        pnt_new = QgsPointXY(np_x,np_y) 
+        list_circle.append(pnt_new) 
+    ellipse_geom = QgsGeometry.fromPolygonXY([list_circle])
+    return ellipse_geom
 
 
 def read_in_chunks(file_object, chunk_size=None):
@@ -180,6 +203,17 @@ class PanoramaViewerDialog(QDockWidget):
         self.wrapper.plugin_is_opened = False
         self.gv.reset_tr()
         iface.mapCanvas().selectionChanged.disconnect(self.gv.define_selection)
+        if self.gv.rubberBandArrow:
+            self.gv.rubberBandArrow.reset()
+
+
+class WebPage(QWebPage):
+    def __init__(self, main_view):
+        super().__init__()
+        self.mv = main_view
+    def javaScriptConsoleMessage(self, msg, line, source):
+        data = json.loads(msg)
+        self.mv.update_arrow(data)
 
 
 class PanoramaViewer(QMainWindow):
@@ -193,6 +227,18 @@ class PanoramaViewer(QMainWindow):
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
         self.setWindowTitle("PanoramaView")
         self.setGeometry(800, 650, 1200, 880)
+
+        self.rubberBandArrow = QgsRubberBand(iface.mapCanvas(), QgsWkbTypes.PolygonGeometry)
+        self.rubberBandArrow.setColor(QColor(0,0,0,255))
+        self.rubberBandArrow.setFillColor(QColor(0,0,0,100))
+        self.rubberBandArrow.setLineStyle(1)
+        self.rubberBandArrow.setWidth(2)
+
+        self.yaw = 70.0
+        self.canvas = iface.mapCanvas()
+        self.x = None 
+        self.y = None 
+
         
         # custom attrs
         self.httpd = None
@@ -213,6 +259,9 @@ class PanoramaViewer(QMainWindow):
         self.view.setSizePolicy(sp)
         self.view.settings().setObjectCacheCapacities(0, 0, 0)
 
+        self.page = WebPage(self)
+        self.view.setPage(self.page)
+
         # other widgets
         self.lbl_layers = QLabel("Layer:")
         self.cmb_layers = QComboBox()
@@ -225,6 +274,12 @@ class PanoramaViewer(QMainWindow):
         self.update_layers.setIcon(self.style().standardIcon(QStyle.SP_BrowserReload))
 
         self.auto_update = QCheckBox("Auto-update view")
+        self.show_directrions = QCheckBox("Show directions")
+
+        self.lt_options = QHBoxLayout()
+        self.lt_options.addWidget(self.auto_update)
+        self.lt_options.addWidget(self.show_directrions)
+        self.lt_options.addStretch()
 
         self.btn_find_panorama = QPushButton("View panorama")
 
@@ -243,7 +298,7 @@ class PanoramaViewer(QMainWindow):
         grid_layout.addWidget(self.update_layers, 2, 6, 1, 1, alignment=Qt.AlignBottom)
 
         # 3. controls and progress bar
-        control_layout.addWidget(self.auto_update)
+        control_layout.addLayout(self.lt_options)
         control_layout.addWidget(self.btn_find_panorama)
         control_layout.addWidget(self.pbar)
 
@@ -266,10 +321,43 @@ class PanoramaViewer(QMainWindow):
         self.httpd = HttpDaemon(self, base_folder)
         self.httpd.start()
 
+
+    def update_arrow(self, data):
+        if not self.show_directrions.isChecked():
+            return 
+        angle = float(data.get('yaw', 0)) 
+        zoom = float(data.get('zoom', 0)) 
+
+        self.yaw = 0.0 if not self.yaw else self.yaw
+        yaw = 1/float(self.yaw)*50
+        yaw = zoom * 0.6
+
+        side_w = self.canvas.scale()/250 + self.canvas.scale()/yaw/5
+        side_w_plus = self.canvas.scale()/450
+        d = self.canvas.scale()/10
+        pnt = QgsPointXY(self.x, self.y)
+        geom_bigger = circle_geom(pnt, side_w, side_w)
+        geom_smaller = circle_geom(pnt, side_w_plus, side_w_plus)
+        diff = geom_bigger.difference(geom_smaller)
+
+        lst_pnts = [
+            QgsPointXY(pnt.x()+d*math.sin(math.radians(angle-yaw)), pnt.y()+d*math.cos(math.radians(angle-yaw))),
+            QgsPointXY(pnt.x(), pnt.y()),
+            QgsPointXY(pnt.x()+d*math.sin(math.radians(angle+yaw)), pnt.y()+d*math.cos(math.radians(angle+yaw))),
+            QgsPointXY(pnt.x()+d*10*math.sin(math.radians(angle)), pnt.y()+d*10*math.cos(math.radians(angle))),
+        ]
+        geom_polygon = QgsGeometry().fromPolygonXY([lst_pnts])
+        new_diff = geom_polygon.intersection(diff)
+
+        self.rubberBandArrow.reset()
+        self.rubberBandArrow.setToGeometry(new_diff)
+
+
     def define_selection(self):
         """Get pic if auto-update view is checked"""
         if self.auto_update.isChecked():
             self.get_pic()
+
 
     def auto_upd_check(self):
         """Auto-update handler to make "View panorama" button enabled/disabled """
@@ -300,6 +388,7 @@ class PanoramaViewer(QMainWindow):
         msg.warning(self, "Warning", err_text)
         return
 
+ 
     def update_current_layer(self):
         """Setting current layer and its fields from combobox value"""
         self.current_layer = self.cmb_layers.currentData()
@@ -311,16 +400,20 @@ class PanoramaViewer(QMainWindow):
             self.cmb_fields.addItems(layer_fields)
 
         self.btn_find_panorama.setChecked(False)
+        self.rubberBandArrow.reset()
        
 
     def reset_tr(self):
         """Reset server"""
         self.btn_find_panorama.setChecked(False)
+        self.rubberBandArrow.reset()
         if self.httpd:
             self.httpd.stop()
 
+ 
     def get_pic(self):
         """Get pic attrs from selected point and proceed to view panorama"""
+        self.rubberBandArrow.reset()
         if self.cmb_fields.currentText():
             field_idx = (
                 self.current_layer.fields().names().index(self.cmb_fields.currentText())
@@ -330,10 +423,21 @@ class PanoramaViewer(QMainWindow):
                 if not self.auto_update.isChecked():
                     self.warning_message("No items selected")
                 return
+            
+            crs = self.current_layer.crs()
+            tr=QgsProject.instance().transformContext()
+            transform_crs = QgsCoordinateTransform(crs, QgsProject.instance().crs(), tr)
+
             current_feature = selected_features[0]
             cf_attr = current_feature.attributes()[field_idx]
+            cf_geom = current_feature.geometry().centroid()
+            cf_geom.transform(transform_crs)
+            self.x = cf_geom.asPoint().x()
+            self.y = cf_geom.asPoint().y()
+            
             result = urlparse(cf_attr)
             img_get = False
+
             
             # panorama path check
             if cf_attr and os.path.isfile(cf_attr):
