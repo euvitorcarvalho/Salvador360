@@ -455,19 +455,121 @@ class PanoramaViewer(QMainWindow):
         self.rubberBandArrow.reset()
         self.rubberBandArrow.setToGeometry(new_diff)
 
+def get_pic_on_selection(self):
+        # Este método substitui a necessidade do checkbox "Auto-update"
+        # A lógica agora é: sempre que a seleção mudar, tente carregar a foto.
+        self.get_pic()
+        
+    def load_layers(self):
+        """Carrega e filtra camadas de polígonos e pontos nos ComboBoxes."""
+        self.cmb_bairro_layer.clear()
+        self.cmb_pontos_layer.clear()
+        
+        layers = QgsProject.instance().mapLayers().values()
+        
+        polygon_layers = [layer for layer in layers if layer.geometryType() == QgsWkbTypes.PolygonGeometry and type(layer) == QgsVectorLayer and layer.isValid()]
+        point_layers = [layer for layer in layers if layer.geometryType() == QgsWkbTypes.PointGeometry and type(layer) == QgsVectorLayer and layer.isValid()]
 
-    def define_selection(self):
-        """Get pic if auto-update view is checked"""
-        if self.auto_update.isChecked():
-            self.get_pic()
+        for layer in polygon_layers:
+            self.cmb_bairro_layer.addItem(layer.name(), layer)
+            
+        for layer in point_layers:
+            self.cmb_pontos_layer.addItem(layer.name(), layer)
+        
+        # Reseta os filtros ao recarregar as camadas
+        pontos_layer = self.cmb_pontos_layer.currentData()
+        if pontos_layer:
+            pontos_layer.setSubsetString("")
 
+    def populate_bairro_fields(self):
+        """Popula os campos da camada de bairro selecionada."""
+        layer = self.cmb_bairro_layer.currentData()
+        self.cmb_bairro_field.clear()
+        if layer:
+            fields = [field.name() for field in layer.fields()]
+            self.cmb_bairro_field.addItems(fields)
 
-    def auto_upd_check(self):
-        """Auto-update handler to make "View panorama" button enabled/disabled """
-        if self.auto_update.isChecked():
-            self.btn_find_panorama.setDisabled(True)
+    def populate_pontos_fields(self):
+        """Popula os campos da camada de pontos selecionada."""
+        layer = self.cmb_pontos_layer.currentData()
+        self.cmb_pontos_bairro_field.clear()
+        self.cmb_pontos_url_field.clear()
+        if layer:
+            fields = [field.name() for field in layer.fields()]
+            self.cmb_pontos_bairro_field.addItems(fields)
+            self.cmb_pontos_url_field.addItems(fields)
+
+    def populate_bairro_selector(self):
+        """Popula o seletor de bairros com base no campo escolhido."""
+        layer = self.cmb_bairro_layer.currentData()
+        field_name = self.cmb_bairro_field.currentText()
+        self.cmb_bairro_select.clear()
+        
+        if layer and field_name:
+            self.cmb_bairro_select.addItem("Todos") # Opção para limpar o filtro
+            unique_values = layer.uniqueValues(layer.fields().indexFromName(field_name))
+            self.cmb_bairro_select.addItems(sorted(list(unique_values)))
+
+    def filter_points_by_neighborhood(self):
+        """Filtra a camada de pontos com base no bairro selecionado."""
+        pontos_layer = self.cmb_pontos_layer.currentData()
+        pontos_field = self.cmb_pontos_bairro_field.currentText()
+        selected_bairro = self.cmb_bairro_select.currentText()
+
+        if not pontos_layer or not pontos_field:
+            return
+
+        if selected_bairro == "Todos":
+            pontos_layer.setSubsetString("") # Limpa o filtro
         else:
-            self.btn_find_panorama.setDisabled(False)
+            # Constrói a expressão de filtro. Ex: "nome_do_campo" = 'nome_do_bairro'
+            filter_expression = f"\"{pontos_field}\" = '{selected_bairro}'"
+            pontos_layer.setSubsetString(filter_expression)
+        
+        iface.mapCanvas().refresh()
+
+    def get_pic(self):
+        """Pega o atributo do ponto selecionado e exibe o panorama."""
+        self.rubberBandArrow.reset()
+        
+        pontos_layer = self.cmb_pontos_layer.currentData()
+        url_field = self.cmb_pontos_url_field.currentText()
+
+        if not pontos_layer or not url_field:
+            return
+
+        selected_features = pontos_layer.selectedFeatures()
+        if not selected_features:
+            # Limpa a visualização se nada estiver selecionado
+            self.view.setUrl(QUrl("about:blank"))
+            return
+
+        field_idx = pontos_layer.fields().indexFromName(url_field)
+        current_feature = selected_features[0]
+        cf_attr = current_feature.attributes()[field_idx]
+
+        # O restante da lógica permanece o mesmo
+        cf_geom = current_feature.geometry().centroid()
+        transform_crs = QgsCoordinateTransform(pontos_layer.crs(), QgsProject.instance().crs(), QgsProject.instance().transformContext())
+        cf_geom.transform(transform_crs)
+        self.x = cf_geom.asPoint().x()
+        self.y = cf_geom.asPoint().y()
+        
+        result = urlparse(cf_attr)
+        img_get = False
+
+        if cf_attr and os.path.isfile(cf_attr):
+            img_get = GetPanorama(self).get_pano_file(cf_attr, "copy")
+        elif all([result.scheme, result.netloc]):
+            img_get = GetPanorama(self).get_pano_file(cf_attr, "download")
+        else:
+            pass
+        
+        if img_get:
+            self.view.load(QUrl("http://localhost:8030/index_local.html"))
+        else:
+            self.view.load(QUrl("http://localhost:8030/index_error.html"))
+        return
 
     def load_layers(self):
         """Update layer combobox"""
@@ -490,21 +592,6 @@ class PanoramaViewer(QMainWindow):
         msg = QMessageBox()
         msg.warning(self, "Warning", err_text)
         return
-
- 
-    def update_current_layer(self):
-        """Setting current layer and its fields from combobox value"""
-        self.current_layer = self.cmb_layers.currentData()
-        if self.current_layer:
-            layer_fields = [
-                f.name() for f in self.current_layer.fields() if f.type() == 10
-            ]
-            self.cmb_fields.clear()
-            self.cmb_fields.addItems(layer_fields)
-
-        self.btn_find_panorama.setChecked(False)
-        self.rubberBandArrow.reset()
-       
 
     def reset_tr(self):
         """Reset server"""
