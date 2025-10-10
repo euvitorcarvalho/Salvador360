@@ -100,9 +100,112 @@ class GetPanorama(QWidget):
     depending on method
     """
 
-    def __init__(self, parent):
-        super().__init__()
-        self.main_app = parent
+def __init__(self, parent):
+    super().__init__(parent=None)
+    
+    self.wrapper = parent
+    self.setWindowFlags(self.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
+    self.setWindowTitle("Salvador 360")
+    self.setGeometry(800, 650, 1200, 880)
+
+    self.rubberBandArrow = QgsRubberBand(iface.mapCanvas(), QgsWkbTypes.PolygonGeometry)
+    self.rubberBandArrow.setColor(QColor(0,0,0,255))
+    self.rubberBandArrow.setFillColor(QColor(0,0,0,100))
+    self.rubberBandArrow.setLineStyle(1)
+    self.rubberBandArrow.setWidth(2)
+
+    self.yaw = 70.0
+    self.canvas = iface.mapCanvas()
+    self.x = None 
+    self.y = None 
+
+    self.httpd = None
+    self.current_layer = None
+
+    centralWidget = QWidget()
+    browser_layout = QHBoxLayout()
+    centralLayout = QVBoxLayout()
+    control_layout = QVBoxLayout()
+    grid_layout = QGridLayout(self)
+    grid_layout.setSpacing(10)
+
+    self.view = QWebView(self)
+    sp = self.view.sizePolicy()
+    sp.setVerticalPolicy(QSizePolicy.Expanding)
+    self.view.setSizePolicy(sp)
+    self.view.settings().setObjectCacheCapacities(0, 0, 0)
+    self.page = WebPage(self)
+    self.view.setPage(self.page)
+
+    self.lbl_bairro_layer = QLabel("Camada de Bairros (Polígono):")
+    self.cmb_bairro_layer = QComboBox()
+
+    self.lbl_bairro_field = QLabel("Campo com Nome do Bairro:")
+    self.cmb_bairro_field = QComboBox()
+
+    self.lbl_bairro_select = QLabel("Selecione o Bairro:")
+    self.cmb_bairro_select = QComboBox()
+
+    self.lbl_pontos_layer = QLabel("Camada de Pontos (Panoramas):")
+    self.cmb_pontos_layer = QComboBox()
+    
+    self.lbl_pontos_bairro_field = QLabel("Campo de Vínculo com Bairro:")
+    self.cmb_pontos_bairro_field = QComboBox()
+
+    self.lbl_pontos_url_field = QLabel("Campo com URL/Caminho:")
+    self.cmb_pontos_url_field = QComboBox()
+
+    self.update_layers = QPushButton()
+    self.update_layers.setFixedWidth(30)
+    self.update_layers.setIcon(self.style().standardIcon(QStyle.SP_BrowserReload))
+    
+    self.show_directrions = QCheckBox("Mostrar direção no mapa")
+    self.btn_find_panorama = QPushButton("Ver Panorama (ponto selecionado no mapa)")
+    self.pbar = QProgressBar()
+    self.pbar.setDisabled(True)
+
+    browser_layout.addWidget(self.view)
+    
+    grid_layout.addWidget(self.lbl_bairro_layer, 1, 0)
+    grid_layout.addWidget(self.cmb_bairro_layer, 1, 1)
+    grid_layout.addWidget(self.lbl_pontos_layer, 1, 2)
+    grid_layout.addWidget(self.cmb_pontos_layer, 1, 3)
+    grid_layout.addWidget(self.update_layers, 1, 4)
+
+    grid_layout.addWidget(self.lbl_bairro_field, 2, 0)
+    grid_layout.addWidget(self.cmb_bairro_field, 2, 1)
+    grid_layout.addWidget(self.lbl_pontos_bairro_field, 2, 2)
+    grid_layout.addWidget(self.cmb_pontos_bairro_field, 2, 3)
+
+    grid_layout.addWidget(self.lbl_bairro_select, 3, 0)
+    grid_layout.addWidget(self.cmb_bairro_select, 3, 1)
+    grid_layout.addWidget(self.lbl_pontos_url_field, 3, 2)
+    grid_layout.addWidget(self.cmb_pontos_url_field, 3, 3)
+
+    control_layout.addWidget(self.show_directrions)
+    control_layout.addWidget(self.btn_find_panorama)
+    control_layout.addWidget(self.pbar)
+
+    centralLayout.addLayout(browser_layout)
+    centralLayout.addLayout(grid_layout)
+    centralLayout.addLayout(control_layout)
+    centralWidget.setLayout(centralLayout)
+    self.setCentralWidget(centralWidget)
+
+    self.update_layers.clicked.connect(self.load_layers)
+    self.btn_find_panorama.clicked.connect(self.get_pic)
+    
+    self.cmb_bairro_layer.currentIndexChanged.connect(self.populate_bairro_fields)
+    self.cmb_bairro_field.currentIndexChanged.connect(self.populate_bairro_selector)
+    self.cmb_bairro_select.currentIndexChanged.connect(self.filter_points_by_neighborhood)
+    
+    self.cmb_pontos_layer.currentIndexChanged.connect(self.populate_pontos_fields)
+    iface.mapCanvas().selectionChanged.connect(self.get_pic_on_selection)
+
+    self.load_layers()
+
+    self.httpd = HttpDaemon(self, base_folder)
+    self.httpd.start()
 
     def get_pano_file(self, file_url, method):
         """Selecting a method to get an image """
