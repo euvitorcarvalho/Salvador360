@@ -3,7 +3,7 @@
 # This file should be included when you package your plugin.# Mandatory items:
 
 [general]
-name=Salvador 360
+name=Salvador 360°
 qgisMinimumVersion=3.0
 description=Plugin for QGIS to view 360-degrees panoramic photos
 version=1.0
