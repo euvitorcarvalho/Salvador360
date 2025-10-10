@@ -191,7 +191,7 @@ class PanoramaViewerDialog(QDockWidget):
         QDockWidget.__init__(self)
         self.wrapper = wrapper
         self.resize(480, 480)
-        self.setWindowTitle("PanoramaView")
+        self.setWindowTitle("Salvador 360")
         self.gv = PanoramaViewer(self)
         self.gv.setMinimumSize(QSize(480, 480))
         self.setWidget(self.gv)
