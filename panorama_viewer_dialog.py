@@ -166,7 +166,7 @@ class PanoramaViewerDialog(QDockWidget):
         QDockWidget.__init__(self)
         self.wrapper = wrapper
         self.resize(480, 480)
-        self.setWindowTitle("Salvador 360")
+        self.setWindowTitle("Salvador 360°")
         self.gv = PanoramaViewer(self)
         self.gv.setMinimumSize(QSize(480, 480))
         self.setWidget(self.gv)
@@ -199,7 +199,7 @@ class PanoramaViewer(QMainWindow):
         
         self.wrapper = parent
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
-        self.setWindowTitle("Salvador 360")
+        self.setWindowTitle("Salvador 360°")
         self.setGeometry(800, 650, 1200, 880)
 
         self.rubberBandArrow = QgsRubberBand(iface.mapCanvas(), QgsWkbTypes.PolygonGeometry)

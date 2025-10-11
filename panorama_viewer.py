@@ -171,7 +171,7 @@ class PanoramaViewer:
 
         self.add_action(
             icon_path,
-            text=self.tr(u'Salvador 360'), # Também ajustei o texto aqui
+            text=self.tr(u'Salvador 360°'), # Também ajustei o texto aqui
             callback=self.run,
             parent=self.iface.mainWindow())
 
