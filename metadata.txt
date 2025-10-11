@@ -15,8 +15,8 @@ about=Plugin that allows you to view panoramic photos in QGIS. Based on web view
     Open plugin, select layer and field. Then manually select a feature with a link to panorama and press "View panorama".
     If you check "Auto-update view", panorama will automatically loading when you select layer feature.
 
-tracker=https://github.com/Kylsha/panorama_viewer/issues
-repository=https://github.com/Kylsha/panorama_viewer
+tracker=https://github.com/euvitorcarvalho/Salvador360/issues
+repository=https://github.com/euvitorcarvalho/Salvador360
 # End of mandatory metadata
 
 # Recommended items:
@@ -28,7 +28,7 @@ hasProcessingProvider=no
 # Tags are comma separated with spaces allowed
 tags=panorama,photosphere,360,panellum
 
-homepage=https://github.com/Kylsha/panorama_viewer
+homepage=https://github.com/euvitorcarvalho/Salvador360
 category=Plugins
 icon=icon.png
 # experimental flag

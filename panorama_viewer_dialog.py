@@ -13,17 +13,14 @@
  ***************************************************************************/
 
 /***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
+ * *
+ * This program is free software; you can redistribute it and/or modify  *
+ * it under the terms of the GNU General Public License as published by  *
+ * the Free Software Foundation; either version 2 of the License, or     *
+ * (at your option) any later version.                                   *
+ * *
  ***************************************************************************/
 """
-
-# -*- coding: utf-8 -*-
-
 import os
 import json 
 import math 
@@ -59,22 +56,16 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 
-# taken from @lepetitchu's comment here https://github.com/pavelpereverzev/panorama_viewer/issues/2#issuecomment-2771276606
 from PyQt5.QtGui import QSurfaceFormat
-# maybe placed in the constructor of widget
 format = QSurfaceFormat()
 format.setProfile(QSurfaceFormat.CompatibilityProfile)
 QSurfaceFormat.setDefaultFormat(format)
 
-
 base_folder = os.path.dirname(os.path.realpath(__file__))
-# base_folder =  r'C:\Users\Pereverzev.PV\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\panorama_viewer'
 
 HOST, PORT = "", 8030
 
 def circle_geom(pnt, w, h):
-    # форма круга для раструба панорамы
-
     list_circle =[]
     for i in range(0,36):
         an =math.radians(i * 10)
@@ -87,7 +78,6 @@ def circle_geom(pnt, w, h):
 
 
 def read_in_chunks(file_object, chunk_size=None):
-    """Read file by chunk index """
     while True:
         data = file_object.read(chunk_size)
         if not data:
@@ -96,119 +86,11 @@ def read_in_chunks(file_object, chunk_size=None):
 
 
 class GetPanorama(QWidget):
-    """Get panorama image from web or local storage
-    depending on method
-    """
-
-def __init__(self, parent):
-    super().__init__(parent=None)
-    
-    self.wrapper = parent
-    self.setWindowFlags(self.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
-    self.setWindowTitle("Salvador 360")
-    self.setGeometry(800, 650, 1200, 880)
-
-    self.rubberBandArrow = QgsRubberBand(iface.mapCanvas(), QgsWkbTypes.PolygonGeometry)
-    self.rubberBandArrow.setColor(QColor(0,0,0,255))
-    self.rubberBandArrow.setFillColor(QColor(0,0,0,100))
-    self.rubberBandArrow.setLineStyle(1)
-    self.rubberBandArrow.setWidth(2)
-
-    self.yaw = 70.0
-    self.canvas = iface.mapCanvas()
-    self.x = None 
-    self.y = None 
-
-    self.httpd = None
-    self.current_layer = None
-
-    centralWidget = QWidget()
-    browser_layout = QHBoxLayout()
-    centralLayout = QVBoxLayout()
-    control_layout = QVBoxLayout()
-    grid_layout = QGridLayout(self)
-    grid_layout.setSpacing(10)
-
-    self.view = QWebView(self)
-    sp = self.view.sizePolicy()
-    sp.setVerticalPolicy(QSizePolicy.Expanding)
-    self.view.setSizePolicy(sp)
-    self.view.settings().setObjectCacheCapacities(0, 0, 0)
-    self.page = WebPage(self)
-    self.view.setPage(self.page)
-
-    self.lbl_bairro_layer = QLabel("Camada de Bairros (Polígono):")
-    self.cmb_bairro_layer = QComboBox()
-
-    self.lbl_bairro_field = QLabel("Campo com Nome do Bairro:")
-    self.cmb_bairro_field = QComboBox()
-
-    self.lbl_bairro_select = QLabel("Selecione o Bairro:")
-    self.cmb_bairro_select = QComboBox()
-
-    self.lbl_pontos_layer = QLabel("Camada de Pontos (Panoramas):")
-    self.cmb_pontos_layer = QComboBox()
-    
-    self.lbl_pontos_bairro_field = QLabel("Campo de Vínculo com Bairro:")
-    self.cmb_pontos_bairro_field = QComboBox()
-
-    self.lbl_pontos_url_field = QLabel("Campo com URL/Caminho:")
-    self.cmb_pontos_url_field = QComboBox()
-
-    self.update_layers = QPushButton()
-    self.update_layers.setFixedWidth(30)
-    self.update_layers.setIcon(self.style().standardIcon(QStyle.SP_BrowserReload))
-    
-    self.show_directrions = QCheckBox("Mostrar direção no mapa")
-    self.btn_find_panorama = QPushButton("Ver Panorama (ponto selecionado no mapa)")
-    self.pbar = QProgressBar()
-    self.pbar.setDisabled(True)
-
-    browser_layout.addWidget(self.view)
-    
-    grid_layout.addWidget(self.lbl_bairro_layer, 1, 0)
-    grid_layout.addWidget(self.cmb_bairro_layer, 1, 1)
-    grid_layout.addWidget(self.lbl_pontos_layer, 1, 2)
-    grid_layout.addWidget(self.cmb_pontos_layer, 1, 3)
-    grid_layout.addWidget(self.update_layers, 1, 4)
-
-    grid_layout.addWidget(self.lbl_bairro_field, 2, 0)
-    grid_layout.addWidget(self.cmb_bairro_field, 2, 1)
-    grid_layout.addWidget(self.lbl_pontos_bairro_field, 2, 2)
-    grid_layout.addWidget(self.cmb_pontos_bairro_field, 2, 3)
-
-    grid_layout.addWidget(self.lbl_bairro_select, 3, 0)
-    grid_layout.addWidget(self.cmb_bairro_select, 3, 1)
-    grid_layout.addWidget(self.lbl_pontos_url_field, 3, 2)
-    grid_layout.addWidget(self.cmb_pontos_url_field, 3, 3)
-
-    control_layout.addWidget(self.show_directrions)
-    control_layout.addWidget(self.btn_find_panorama)
-    control_layout.addWidget(self.pbar)
-
-    centralLayout.addLayout(browser_layout)
-    centralLayout.addLayout(grid_layout)
-    centralLayout.addLayout(control_layout)
-    centralWidget.setLayout(centralLayout)
-    self.setCentralWidget(centralWidget)
-
-    self.update_layers.clicked.connect(self.load_layers)
-    self.btn_find_panorama.clicked.connect(self.get_pic)
-    
-    self.cmb_bairro_layer.currentIndexChanged.connect(self.populate_bairro_fields)
-    self.cmb_bairro_field.currentIndexChanged.connect(self.populate_bairro_selector)
-    self.cmb_bairro_select.currentIndexChanged.connect(self.filter_points_by_neighborhood)
-    
-    self.cmb_pontos_layer.currentIndexChanged.connect(self.populate_pontos_fields)
-    iface.mapCanvas().selectionChanged.connect(self.get_pic_on_selection)
-
-    self.load_layers()
-
-    self.httpd = HttpDaemon(self, base_folder)
-    self.httpd.start()
+    def __init__(self, parent):
+        super().__init__()
+        self.main_app = parent
 
     def get_pano_file(self, file_url, method):
-        """Selecting a method to get an image """
         if method == "download":
             result = self.download(file_url)
         else:
@@ -216,17 +98,18 @@ def __init__(self, parent):
         return result
 
     def download(self, url):
-        """Web loader which also writes file chunk by chunk """
         self.main_app.pbar.setDisabled(False)
         r = requests.get(url, allow_redirects=True, stream=True)
         if r.status_code != 200:
             return False
-        total_length = int(r.headers.get("content-length"))
+        total_length = r.headers.get("content-length")
+        if total_length is None: # No content length header
+            return False
+        total_length = int(total_length)
         file_name = os.path.join(base_folder, "image.JPG")
         if total_length: 
             with open(file_name, "wb") as f:
-                total_length = int(total_length)
-                p_step = 100 / total_length * 4096
+                p_step = 100 / total_length * 4096 if total_length > 0 else 0
                 counter = 0
                 for data in r.iter_content(chunk_size=4096):
                     counter += p_step
@@ -238,13 +121,12 @@ def __init__(self, parent):
         return True
 
     def copy_file(self, file_in):
-        """File copier, also uses chunk writing method """
         self.main_app.pbar.setDisabled(False)
         file_out = os.path.join(base_folder, "image.JPG")
         file_stats = os.stat(file_in)
         size_b = file_stats.st_size
-        ch_optimal_size = int(size_b / 100)
-        p_step = 100 / size_b * ch_optimal_size
+        ch_optimal_size = int(size_b / 100) if size_b > 100 else size_b
+        p_step = 100 / size_b * ch_optimal_size if size_b > 0 else 0
         counter = 0
         open(file_out, "w").close()
         with open(file_in, "rb") as f:
@@ -260,19 +142,11 @@ def __init__(self, parent):
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
-    """Web server handler, which will not write any message
-    in python console. As a result, no need to open python console
-    in QGIS in order to make plugin work
-    """
-
     def log_message(self, format, *args):
         pass
 
 
 class HttpDaemon(QtCore.QThread):
-    """Simple web server class
-    """
-
     def __init__(self, parent, path):
         super(QThread, self).__init__()
         self.server_path = path
@@ -288,13 +162,11 @@ class HttpDaemon(QtCore.QThread):
 
 
 class PanoramaViewerDialog(QDockWidget):
-    """Main widget is a dock widget located on the right bottom corner """
-
     def __init__(self, wrapper):
         QDockWidget.__init__(self)
         self.wrapper = wrapper
         self.resize(480, 480)
-        self.setWindowTitle("Salvador 360°")
+        self.setWindowTitle("Salvador 360")
         self.gv = PanoramaViewer(self)
         self.gv.setMinimumSize(QSize(480, 480))
         self.setWidget(self.gv)
@@ -302,10 +174,9 @@ class PanoramaViewerDialog(QDockWidget):
         self.wrapper.plugin_is_opened = True
 
     def onDestroy(self, e):
-        """Widget close handler """
         self.wrapper.plugin_is_opened = False
         self.gv.reset_tr()
-        iface.mapCanvas().selectionChanged.disconnect(self.gv.define_selection)
+        iface.mapCanvas().selectionChanged.disconnect(self.gv.get_pic_on_selection)
         if self.gv.rubberBandArrow:
             self.gv.rubberBandArrow.reset()
 
@@ -315,20 +186,20 @@ class WebPage(QWebPage):
         super().__init__()
         self.mv = main_view
     def javaScriptConsoleMessage(self, msg, line, source):
-        data = json.loads(msg)
-        self.mv.update_arrow(data)
+        try:
+            data = json.loads(msg)
+            self.mv.update_arrow(data)
+        except json.JSONDecodeError:
+            pass
 
 
 class PanoramaViewer(QMainWindow):
-    """Widget interface """
-
     def __init__(self, parent):
         super().__init__(parent=None)
         
-        # init settings
         self.wrapper = parent
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
-        self.setWindowTitle("PanoramaView")
+        self.setWindowTitle("Salvador 360")
         self.setGeometry(800, 650, 1200, 880)
 
         self.rubberBandArrow = QgsRubberBand(iface.mapCanvas(), QgsWkbTypes.PolygonGeometry)
@@ -342,12 +213,9 @@ class PanoramaViewer(QMainWindow):
         self.x = None 
         self.y = None 
 
-        
-        # custom attrs
         self.httpd = None
         self.current_layer = None
 
-        # layout 
         centralWidget = QWidget()
         browser_layout = QHBoxLayout()
         centralLayout = QVBoxLayout()
@@ -355,75 +223,83 @@ class PanoramaViewer(QMainWindow):
         grid_layout = QGridLayout(self)
         grid_layout.setSpacing(10)
 
-        # webview setup
         self.view = QWebView(self)
         sp = self.view.sizePolicy()
         sp.setVerticalPolicy(QSizePolicy.Expanding)
         self.view.setSizePolicy(sp)
         self.view.settings().setObjectCacheCapacities(0, 0, 0)
-
         self.page = WebPage(self)
         self.view.setPage(self.page)
 
-        # other widgets
-        self.lbl_layers = QLabel("Layer:")
-        self.cmb_layers = QComboBox()
+        self.lbl_bairro_layer = QLabel("Camada de Bairros (Polígono):")
+        self.cmb_bairro_layer = QComboBox()
 
-        self.lbl_fields = QLabel("Field:")
-        self.cmb_fields = QComboBox()
+        self.lbl_bairro_field = QLabel("Campo com Nome do Bairro:")
+        self.cmb_bairro_field = QComboBox()
+
+        self.lbl_bairro_select = QLabel("Selecione o Bairro:")
+        self.cmb_bairro_select = QComboBox()
+
+        self.lbl_pontos_layer = QLabel("Camada de Pontos (Panoramas):")
+        self.cmb_pontos_layer = QComboBox()
         
+        self.lbl_pontos_bairro_field = QLabel("Campo de Vínculo com Bairro:")
+        self.cmb_pontos_bairro_field = QComboBox()
+
+        self.lbl_pontos_url_field = QLabel("Campo com URL/Caminho:")
+        self.cmb_pontos_url_field = QComboBox()
+
         self.update_layers = QPushButton()
         self.update_layers.setFixedWidth(30)
         self.update_layers.setIcon(self.style().standardIcon(QStyle.SP_BrowserReload))
-
-        self.auto_update = QCheckBox("Auto-update view")
-        self.show_directrions = QCheckBox("Show directions")
-
-        self.lt_options = QHBoxLayout()
-        self.lt_options.addWidget(self.auto_update)
-        self.lt_options.addWidget(self.show_directrions)
-        self.lt_options.addStretch()
-
-        self.btn_find_panorama = QPushButton("View panorama")
-
+        
+        self.show_directrions = QCheckBox("Mostrar direção no mapa")
+        self.btn_find_panorama = QPushButton("Ver Panorama (ponto selecionado no mapa)")
         self.pbar = QProgressBar()
         self.pbar.setDisabled(True)
 
-        # layout setup
-        # 1. browser widget
         browser_layout.addWidget(self.view)
+        
+        grid_layout.addWidget(self.lbl_bairro_layer, 1, 0)
+        grid_layout.addWidget(self.cmb_bairro_layer, 1, 1)
+        grid_layout.addWidget(self.lbl_pontos_layer, 1, 2)
+        grid_layout.addWidget(self.cmb_pontos_layer, 1, 3)
+        grid_layout.addWidget(self.update_layers, 1, 4)
 
-        # 2. layer-field selectors
-        grid_layout.addWidget(self.lbl_layers, 1, 1, 1, 2, alignment=Qt.AlignBottom)
-        grid_layout.addWidget(self.lbl_fields, 1, 3, 1, 2, alignment=Qt.AlignBottom)
-        grid_layout.addWidget(self.cmb_layers, 2, 1, 1, 2, alignment=Qt.AlignBottom)
-        grid_layout.addWidget(self.cmb_fields, 2, 3, 1, 2, alignment=Qt.AlignBottom)
-        grid_layout.addWidget(self.update_layers, 2, 6, 1, 1, alignment=Qt.AlignBottom)
+        grid_layout.addWidget(self.lbl_bairro_field, 2, 0)
+        grid_layout.addWidget(self.cmb_bairro_field, 2, 1)
+        grid_layout.addWidget(self.lbl_pontos_bairro_field, 2, 2)
+        grid_layout.addWidget(self.cmb_pontos_bairro_field, 2, 3)
 
-        # 3. controls and progress bar
-        control_layout.addLayout(self.lt_options)
+        grid_layout.addWidget(self.lbl_bairro_select, 3, 0)
+        grid_layout.addWidget(self.cmb_bairro_select, 3, 1)
+        grid_layout.addWidget(self.lbl_pontos_url_field, 3, 2)
+        grid_layout.addWidget(self.cmb_pontos_url_field, 3, 3)
+
+        control_layout.addWidget(self.show_directrions)
         control_layout.addWidget(self.btn_find_panorama)
         control_layout.addWidget(self.pbar)
 
-        # 4. adding all layouts 
         centralLayout.addLayout(browser_layout)
         centralLayout.addLayout(grid_layout)
         centralLayout.addLayout(control_layout)
         centralWidget.setLayout(centralLayout)
         self.setCentralWidget(centralWidget)
 
-        # triggers
-        self.btn_find_panorama.clicked.connect(self.get_pic)
         self.update_layers.clicked.connect(self.load_layers)
-        self.auto_update.stateChanged.connect(self.auto_upd_check)
-        self.cmb_layers.currentIndexChanged.connect(self.update_current_layer)
-        iface.mapCanvas().selectionChanged.connect(self.define_selection)
+        self.btn_find_panorama.clicked.connect(self.get_pic)
+        
+        self.cmb_bairro_layer.currentIndexChanged.connect(self.populate_bairro_fields)
+        self.cmb_bairro_field.currentIndexChanged.connect(self.populate_bairro_selector)
+        self.cmb_bairro_select.currentIndexChanged.connect(self.filter_points_by_neighborhood)
+        
+        self.cmb_pontos_layer.currentIndexChanged.connect(self.populate_pontos_fields)
+        iface.mapCanvas().selectionChanged.connect(self.get_pic_on_selection)
+
         self.load_layers()
 
-        # launching web server
         self.httpd = HttpDaemon(self, base_folder)
         self.httpd.start()
-
 
     def update_arrow(self, data):
         if not self.show_directrions.isChecked():
@@ -432,10 +308,10 @@ class PanoramaViewer(QMainWindow):
         zoom = float(data.get('zoom', 0)) 
 
         self.yaw = 0.0 if not self.yaw else self.yaw
-        yaw = 1/float(self.yaw)*50
+        yaw = 1/float(self.yaw)*50 if self.yaw != 0 else 1
         yaw = zoom * 0.6
 
-        side_w = self.canvas.scale()/250 + self.canvas.scale()/yaw/5
+        side_w = self.canvas.scale()/250 + self.canvas.scale()/yaw/5 if yaw != 0 else self.canvas.scale()/250
         side_w_plus = self.canvas.scale()/450
         d = self.canvas.scale()/10
         pnt = QgsPointXY(self.x, self.y)
@@ -455,13 +331,16 @@ class PanoramaViewer(QMainWindow):
         self.rubberBandArrow.reset()
         self.rubberBandArrow.setToGeometry(new_diff)
 
-def get_pic_on_selection(self):
-        # Este método substitui a necessidade do checkbox "Auto-update"
-        # A lógica agora é: sempre que a seleção mudar, tente carregar a foto.
+    def reset_tr(self):
+        self.btn_find_panorama.setChecked(False)
+        self.rubberBandArrow.reset()
+        if self.httpd:
+            self.httpd.stop()
+
+    def get_pic_on_selection(self):
         self.get_pic()
         
     def load_layers(self):
-        """Carrega e filtra camadas de polígonos e pontos nos ComboBoxes."""
         self.cmb_bairro_layer.clear()
         self.cmb_pontos_layer.clear()
         
@@ -476,13 +355,11 @@ def get_pic_on_selection(self):
         for layer in point_layers:
             self.cmb_pontos_layer.addItem(layer.name(), layer)
         
-        # Reseta os filtros ao recarregar as camadas
         pontos_layer = self.cmb_pontos_layer.currentData()
         if pontos_layer:
             pontos_layer.setSubsetString("")
 
     def populate_bairro_fields(self):
-        """Popula os campos da camada de bairro selecionada."""
         layer = self.cmb_bairro_layer.currentData()
         self.cmb_bairro_field.clear()
         if layer:
@@ -490,7 +367,6 @@ def get_pic_on_selection(self):
             self.cmb_bairro_field.addItems(fields)
 
     def populate_pontos_fields(self):
-        """Popula os campos da camada de pontos selecionada."""
         layer = self.cmb_pontos_layer.currentData()
         self.cmb_pontos_bairro_field.clear()
         self.cmb_pontos_url_field.clear()
@@ -500,18 +376,16 @@ def get_pic_on_selection(self):
             self.cmb_pontos_url_field.addItems(fields)
 
     def populate_bairro_selector(self):
-        """Popula o seletor de bairros com base no campo escolhido."""
         layer = self.cmb_bairro_layer.currentData()
         field_name = self.cmb_bairro_field.currentText()
         self.cmb_bairro_select.clear()
         
         if layer and field_name:
-            self.cmb_bairro_select.addItem("Todos") # Opção para limpar o filtro
+            self.cmb_bairro_select.addItem("Todos")
             unique_values = layer.uniqueValues(layer.fields().indexFromName(field_name))
             self.cmb_bairro_select.addItems(sorted(list(unique_values)))
 
     def filter_points_by_neighborhood(self):
-        """Filtra a camada de pontos com base no bairro selecionado."""
         pontos_layer = self.cmb_pontos_layer.currentData()
         pontos_field = self.cmb_pontos_bairro_field.currentText()
         selected_bairro = self.cmb_bairro_select.currentText()
@@ -519,17 +393,16 @@ def get_pic_on_selection(self):
         if not pontos_layer or not pontos_field:
             return
 
-        if selected_bairro == "Todos":
-            pontos_layer.setSubsetString("") # Limpa o filtro
+        if selected_bairro == "Todos" or not selected_bairro:
+            pontos_layer.setSubsetString("")
         else:
-            # Constrói a expressão de filtro. Ex: "nome_do_campo" = 'nome_do_bairro'
-            filter_expression = f"\"{pontos_field}\" = '{selected_bairro}'"
+            # CORREÇÃO APLICADA AQUI
+            filter_expression = f'"{pontos_field}" = \'{selected_bairro}\''
             pontos_layer.setSubsetString(filter_expression)
         
         iface.mapCanvas().refresh()
 
     def get_pic(self):
-        """Pega o atributo do ponto selecionado e exibe o panorama."""
         self.rubberBandArrow.reset()
         
         pontos_layer = self.cmb_pontos_layer.currentData()
@@ -540,7 +413,6 @@ def get_pic_on_selection(self):
 
         selected_features = pontos_layer.selectedFeatures()
         if not selected_features:
-            # Limpa a visualização se nada estiver selecionado
             self.view.setUrl(QUrl("about:blank"))
             return
 
@@ -548,7 +420,9 @@ def get_pic_on_selection(self):
         current_feature = selected_features[0]
         cf_attr = current_feature.attributes()[field_idx]
 
-        # O restante da lógica permanece o mesmo
+        if not cf_attr:
+            return
+
         cf_geom = current_feature.geometry().centroid()
         transform_crs = QgsCoordinateTransform(pontos_layer.crs(), QgsProject.instance().crs(), QgsProject.instance().transformContext())
         cf_geom.transform(transform_crs)
@@ -558,7 +432,7 @@ def get_pic_on_selection(self):
         result = urlparse(cf_attr)
         img_get = False
 
-        if cf_attr and os.path.isfile(cf_attr):
+        if os.path.isfile(cf_attr):
             img_get = GetPanorama(self).get_pano_file(cf_attr, "copy")
         elif all([result.scheme, result.netloc]):
             img_get = GetPanorama(self).get_pano_file(cf_attr, "download")
@@ -570,82 +444,3 @@ def get_pic_on_selection(self):
         else:
             self.view.load(QUrl("http://localhost:8030/index_error.html"))
         return
-
-    def load_layers(self):
-        """Update layer combobox"""
-        self.layer_data = {
-            lyr.id(): lyr
-            for lyr in QgsProject.instance().mapLayers().values()
-            if type(lyr) == QgsVectorLayer and lyr.isValid()
-        }
-        self.cmb_layers.clear()
-        i = 0
-        for layer_id, layer in self.layer_data.items():
-            self.cmb_layers.addItem(layer.name())
-            self.cmb_layers.setItemData(i, layer_id, QtCore.Qt.ToolTipRole)
-            self.cmb_layers.setItemData(i, layer)
-            i += 1
-        self.update_current_layer()
-
-    def warning_message(self, err_text):
-        """Custom warning message"""
-        msg = QMessageBox()
-        msg.warning(self, "Warning", err_text)
-        return
-
-    def reset_tr(self):
-        """Reset server"""
-        self.btn_find_panorama.setChecked(False)
-        self.rubberBandArrow.reset()
-        if self.httpd:
-            self.httpd.stop()
-
- 
-    def get_pic(self):
-        """Get pic attrs from selected point and proceed to view panorama"""
-        self.rubberBandArrow.reset()
-        if self.cmb_fields.currentText():
-            field_idx = (
-                self.current_layer.fields().names().index(self.cmb_fields.currentText())
-            )
-            selected_features = self.current_layer.selectedFeatures()
-            if not selected_features:
-                if not self.auto_update.isChecked():
-                    self.warning_message("No items selected")
-                return
-            
-            crs = self.current_layer.crs()
-            tr=QgsProject.instance().transformContext()
-            transform_crs = QgsCoordinateTransform(crs, QgsProject.instance().crs(), tr)
-
-            current_feature = selected_features[0]
-            cf_attr = current_feature.attributes()[field_idx]
-            cf_geom = current_feature.geometry().centroid()
-            cf_geom.transform(transform_crs)
-            self.x = cf_geom.asPoint().x()
-            self.y = cf_geom.asPoint().y()
-            
-            result = urlparse(cf_attr)
-            img_get = False
-
-            
-            # panorama path check
-            if cf_attr and os.path.isfile(cf_attr):
-                img_get = GetPanorama(self).get_pano_file(cf_attr, "copy")
-            elif all([result.scheme, result.netloc]):
-                img_get = GetPanorama(self).get_pano_file(cf_attr, "download")
-            else:
-                pass
-            
-            # view panorama or not
-            if img_get:
-                self.view.load(QUrl("http://localhost:8030/index_local.html"))
-            else:
-                self.view.load(QUrl("http://localhost:8030/index_error.html"))
-            return
-
-
-
-# dw = PanoramaViewerDialog(None)
-# iface.addDockWidget(Qt.RightDockWidgetArea, dw)
-# dw.setFloating(True)

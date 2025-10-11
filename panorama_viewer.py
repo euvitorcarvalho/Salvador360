@@ -167,24 +167,20 @@ class PanoramaViewer:
         return action
 
     def initGui(self):
-        """Create the menu entries and toolbar icons inside the QGIS GUI."""
+        icon_path = os.path.join(os.path.dirname(__file__), 'icon.png')
 
-        icon_path = ':/plugins/panorama_viewer/icon.png'
         self.add_action(
             icon_path,
-            text=self.tr(u'Panorama Viewer'),
+            text=self.tr(u'Salvador 360'), # Também ajustei o texto aqui
             callback=self.run,
             parent=self.iface.mainWindow())
-
-        # will be set False in run()
-        self.first_start = True
 
 
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
         for action in self.actions:
             self.iface.removePluginMenu(
-                self.tr(u'&Panorama Viewer'),
+                self.tr(u'Salvador 360°'),
                 action)
             self.iface.removeToolBarIcon(action)
 
