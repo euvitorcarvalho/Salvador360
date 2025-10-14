@@ -61,7 +61,10 @@ format = QSurfaceFormat()
 format.setProfile(QSurfaceFormat.CompatibilityProfile)
 QSurfaceFormat.setDefaultFormat(format)
 
-
+from qgis.core import QgsVectorLayer, QgsProject, QgsFeatureRequest
+from PyQt5.QtWidgets import QLineEdit
+from PyQt5.QtCore import QUrl
+import requests
 
 base_folder = os.path.dirname(os.path.realpath(__file__))
 
