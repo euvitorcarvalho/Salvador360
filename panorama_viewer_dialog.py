@@ -61,6 +61,8 @@ format = QSurfaceFormat()
 format.setProfile(QSurfaceFormat.CompatibilityProfile)
 QSurfaceFormat.setDefaultFormat(format)
 
+
+
 base_folder = os.path.dirname(os.path.realpath(__file__))
 
 HOST, PORT = "", 8030
