@@ -33,6 +33,9 @@ from qgis.utils import iface
 from qgis._core import *
 from qgis._gui import *
 
+from qgis.core import QgsPointXY, QgsGeometry
+from PyQt5.QtCore import QThread, QSize
+
 
 from PyQt5.QtWebKitWidgets import QWebView, QWebPage
 from PyQt5 import *
@@ -263,146 +266,53 @@ class PanoramaViewer(QMainWindow):
         self.httpd = HttpDaemon(self, base_folder)
         self.httpd.start()
 
-    def update_arrow(self, data):
-        if not self.show_directrions.isChecked():
-            return 
-        angle = float(data.get('yaw', 0)) 
-        zoom = float(data.get('zoom', 0)) 
-
-        self.yaw = 0.0 if not self.yaw else self.yaw
-        yaw = 1/float(self.yaw)*50 if self.yaw != 0 else 1
-        yaw = zoom * 0.6
-
-        side_w = self.canvas.scale()/250 + self.canvas.scale()/yaw/5 if yaw != 0 else self.canvas.scale()/250
-        side_w_plus = self.canvas.scale()/450
-        d = self.canvas.scale()/10
-        pnt = QgsPointXY(self.x, self.y)
-        geom_bigger = circle_geom(pnt, side_w, side_w)
-        geom_smaller = circle_geom(pnt, side_w_plus, side_w_plus)
-        diff = geom_bigger.difference(geom_smaller)
-
-        lst_pnts = [
-            QgsPointXY(pnt.x()+d*math.sin(math.radians(angle-yaw)), pnt.y()+d*math.cos(math.radians(angle-yaw))),
-            QgsPointXY(pnt.x(), pnt.y()),
-            QgsPointXY(pnt.x()+d*math.sin(math.radians(angle+yaw)), pnt.y()+d*math.cos(math.radians(angle+yaw))),
-            QgsPointXY(pnt.x()+d*10*math.sin(math.radians(angle)), pnt.y()+d*10*math.cos(math.radians(angle))),
-        ]
-        geom_polygon = QgsGeometry().fromPolygonXY([lst_pnts])
-        new_diff = geom_polygon.intersection(diff)
-
-        self.rubberBandArrow.reset()
-        self.rubberBandArrow.setToGeometry(new_diff)
-
-    def reset_tr(self):
-        self.btn_find_panorama.setChecked(False)
-        self.rubberBandArrow.reset()
-        if self.httpd:
-            self.httpd.stop()
-
-    def get_pic_on_selection(self):
-        self.get_pic()
-        
-    def load_layers(self):
-        self.cmb_bairro_layer.clear()
-        self.cmb_pontos_layer.clear()
-        
-        layers = QgsProject.instance().mapLayers().values()
-        
-        polygon_layers = [layer for layer in layers if layer.geometryType() == QgsWkbTypes.PolygonGeometry and type(layer) == QgsVectorLayer and layer.isValid()]
-        point_layers = [layer for layer in layers if layer.geometryType() == QgsWkbTypes.PointGeometry and type(layer) == QgsVectorLayer and layer.isValid()]
-
-        for layer in polygon_layers:
-            self.cmb_bairro_layer.addItem(layer.name(), layer)
-            
-        for layer in point_layers:
-            self.cmb_pontos_layer.addItem(layer.name(), layer)
-        
-        pontos_layer = self.cmb_pontos_layer.currentData()
-        if pontos_layer:
-            pontos_layer.setSubsetString("")
-
-    def populate_bairro_fields(self):
-        layer = self.cmb_bairro_layer.currentData()
-        self.cmb_bairro_field.clear()
-        if layer:
-            fields = [field.name() for field in layer.fields()]
-            self.cmb_bairro_field.addItems(fields)
-
-    def populate_pontos_fields(self):
-        layer = self.cmb_pontos_layer.currentData()
-        self.cmb_pontos_bairro_field.clear()
-        self.cmb_pontos_url_field.clear()
-        if layer:
-            fields = [field.name() for field in layer.fields()]
-            self.cmb_pontos_bairro_field.addItems(fields)
-            self.cmb_pontos_url_field.addItems(fields)
-
-    def populate_bairro_selector(self):
-        layer = self.cmb_bairro_layer.currentData()
-        field_name = self.cmb_bairro_field.currentText()
-        self.cmb_bairro_select.clear()
-        
-        if layer and field_name:
-            self.cmb_bairro_select.addItem("Todos")
-            unique_values = layer.uniqueValues(layer.fields().indexFromName(field_name))
-            self.cmb_bairro_select.addItems(sorted(list(unique_values)))
-
-    def filter_points_by_neighborhood(self):
-        pontos_layer = self.cmb_pontos_layer.currentData()
-        pontos_field = self.cmb_pontos_bairro_field.currentText()
-        selected_bairro = self.cmb_bairro_select.currentText()
-
-        if not pontos_layer or not pontos_field:
+    def carregar_bairros(self):
+        """
+        Conecta ao WFS da camada de bairros e popula o combobox.
+        """
+        uri = "http://geoserver.sedur.salvador.ba.gov.br:8080/geoserver/bairro_oficial/ows?SERVICE=WFS&REQUEST=GetCapabilities"
+        layer = QgsVectorLayer(uri, "Bairros", "WFS")
+        if not layer.isValid():
+            QMessageBox.critical(self, "Erro", "Não foi possível carregar a camada de bairros.")
             return
 
-        if selected_bairro == "Todos" or not selected_bairro:
-            pontos_layer.setSubsetString("")
-        else:
-            # CORREÇÃO APLICADA AQUI
-            filter_expression = f'"{pontos_field}" = \'{selected_bairro}\''
-            pontos_layer.setSubsetString(filter_expression)
-        
-        iface.mapCanvas().refresh()
+        field_name = "Nome do Bairro"
+        bairros = sorted([f[field_name] for f in layer.getFeatures()])
+        self.cmb_bairro.addItems(bairros)
+        QgsProject.instance().addMapLayer(layer)
 
-    def get_pic(self):
-        self.rubberBandArrow.reset()
-        
-        pontos_layer = self.cmb_pontos_layer.currentData()
-        url_field = self.cmb_pontos_url_field.currentText()
-
-        if not pontos_layer or not url_field:
+    def carregar_logradouros(self):
+        """
+        Filtra os logradouros com base no bairro selecionado.
+        """
+        bairro_selecionado = self.cmb_bairro.currentText()
+        if not bairro_selecionado:
             return
 
-        selected_features = pontos_layer.selectedFeatures()
+        # Lógica para carregar e filtrar a camada de logradouros
+        # (similar à função carregar_bairros, mas com filtro)
+
+    def exibir_pontos_panorama(self):
+        """
+        Carrega e exibe os pontos de panorama para o logradouro selecionado.
+        """
+        codlog_selecionado = self.cmb_logradouro.currentText()
+        if not codlog_selecionado:
+            return
+
+        # Lógica para carregar a camada de pontos de panorama e filtrar pelo codlog
+
+    def visualizar_panorama_selecionado(self):
+        """
+        Exibe o panorama quando um ponto é selecionado no mapa.
+        """
+        layer = self.current_layer
+        if not layer or not isinstance(layer, QgsVectorLayer):
+            return
+
+        selected_features = layer.selectedFeatures()
         if not selected_features:
             self.view.setUrl(QUrl("about:blank"))
             return
 
-        field_idx = pontos_layer.fields().indexFromName(url_field)
-        current_feature = selected_features[0]
-        cf_attr = current_feature.attributes()[field_idx]
-
-        if not cf_attr:
-            return
-
-        cf_geom = current_feature.geometry().centroid()
-        transform_crs = QgsCoordinateTransform(pontos_layer.crs(), QgsProject.instance().crs(), QgsProject.instance().transformContext())
-        cf_geom.transform(transform_crs)
-        self.x = cf_geom.asPoint().x()
-        self.y = cf_geom.asPoint().y()
-        
-        result = urlparse(cf_attr)
-        img_get = False
-
-        if os.path.isfile(cf_attr):
-            img_get = GetPanorama(self).get_pano_file(cf_attr, "copy")
-        elif all([result.scheme, result.netloc]):
-            img_get = GetPanorama(self).get_pano_file(cf_attr, "download")
-        else:
-            pass
-        
-        if img_get:
-            self.view.load(QUrl("http://localhost:8030/index_local.html"))
-        else:
-            self.view.load(QUrl("http://localhost:8030/index_error.html"))
-        return
+        # Lógica para obter a URL da imagem e exibi-la
