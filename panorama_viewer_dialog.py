@@ -25,6 +25,7 @@ import os
 import json 
 import math 
 import requests
+import datetime
 
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
@@ -287,19 +288,6 @@ class PanoramaViewer(QMainWindow):
         if not layer: return
         self.cmb_bairro_field.addItems([field.name() for field in layer.fields()])
 
-    def popular_campos_logradouro(self, layer):
-        self.cmb_logradouro_field.clear()
-        if not layer: return
-        self.cmb_logradouro_field.addItems([field.name() for field in layer.fields()])
-
-    def popular_campos_panorama(self, layer):
-        self.cmb_panorama_codlog_field.clear()
-        self.cmb_panorama_url_field.clear()
-        if not layer: return
-        fields = [field.name() for field in layer.fields()]
-        self.cmb_panorama_codlog_field.addItems(fields)
-        self.cmb_panorama_url_field.addItems(fields)
-
     def popular_valores_bairro(self):
         layer = self.cmb_bairro_layer.currentLayer()
         field_name = self.cmb_bairro_field.currentText()
@@ -307,59 +295,45 @@ class PanoramaViewer(QMainWindow):
         if not layer or not field_name: return
 
         unique_values = layer.uniqueValues(layer.fields().indexFromName(field_name))
-        self.cmb_bairro_select.addItems(sorted(list(unique_values)))
+        self.cmb_bairro_select.addItems(["-- Selecione um Bairro --"] + sorted(list(unique_values)))
 
-    def popular_valores_logradouro(self):
+    def filtrar_pontos_no_bairro(self):
         bairro_layer = self.cmb_bairro_layer.currentLayer()
         bairro_field = self.cmb_bairro_field.currentText()
-        bairro_selecionado = self.cmb_bairro_select.currentText()
+        bairro_nome = self.cmb_bairro_select.currentText()
         
-        logradouro_layer = self.cmb_logradouro_layer.currentLayer()
-        logradouro_codlog_field = self.cmb_logradouro_field.currentText()
-
-        self.cmb_logradouro_select.clear()
-        
-        if not all([bairro_layer, bairro_field, bairro_selecionado, logradouro_layer, logradouro_codlog_field]):
-            return
-
-        # Filtra a camada de bairros para obter a geometria
-        bairro_layer.selectByExpression(f"\"{bairro_field}\" = '{bairro_selecionado}'")
-        feature_bairro = next(bairro_layer.getSelectedFeatures(), None)
-        bairro_layer.removeSelection()
-        
-        if not feature_bairro: return
-        geom_bairro = feature_bairro.geometry()
-
-        # Filtra os logradouros que intersectam o bairro
-        request = QgsFeatureRequest().setFilterRect(geom_bairro.boundingBox())
-        codlogs = set()
-        for f in logradouro_layer.getFeatures(request):
-            if f.geometry().intersects(geom_bairro):
-                codlogs.add(str(f[logradouro_codlog_field]))
-        
-        self.cmb_logradouro_select.addItems(sorted(list(codlogs)))
-
-    def filtrar_e_exibir_pontos(self):
-        logradouro_selecionado = self.cmb_logradouro_select.currentText()
         panorama_layer = self.cmb_panorama_layer.currentLayer()
-        panorama_codlog_field = self.cmb_panorama_codlog_field.currentText()
 
-        if not all([logradouro_selecionado, panorama_layer, panorama_codlog_field]):
-            QMessageBox.warning(self, "Atenção", "Preencha todos os campos de camada e filtro.")
+        if not all([bairro_layer, bairro_field, panorama_layer]) or bairro_nome == "-- Selecione um Bairro --":
+            QMessageBox.warning(self, "Atenção", "Por favor, selecione todas as camadas e um bairro para filtrar.")
             return
-        
-        # Define a camada atual de panoramas para o evento de seleção
+            
         self.current_panorama_layer = panorama_layer
 
+        # Encontra a geometria do bairro selecionado
+        request = QgsFeatureRequest().setFilterExpression(f"\"{bairro_field}\" = '{bairro_nome}'")
+        feature_bairro = next(bairro_layer.getFeatures(request), None)
+        
+        if not feature_bairro:
+            QMessageBox.warning(self, "Atenção", "Não foi possível encontrar a geometria para o bairro selecionado.")
+            return
+        
+        geom_bairro = feature_bairro.geometry()
+        geom_wkt = geom_bairro.asWkt() # Converte a geometria para texto (WKT)
+
+        # Cria a expressão de filtro espacial
+        filter_expression = f"intersects($geometry, geom_from_wkt('{geom_wkt}'))"
+        
         # Aplica o filtro na camada de panoramas
-        filter_expression = f"\"{panorama_codlog_field}\" = '{logradouro_selecionado}'"
         panorama_layer.setSubsetString(filter_expression)
+        
+        if panorama_layer.featureCount() == 0:
+            QMessageBox.information(self, "Resultado", f"Nenhum ponto de panorama encontrado no bairro '{bairro_nome}'.")
         
         iface.mapCanvas().setExtent(panorama_layer.extent())
         iface.mapCanvas().refresh()
 
     def visualizar_panorama_selecionado(self):
-        # Esta função é acionada por qualquer mudança de seleção no mapa
         if not self.current_panorama_layer:
             return
 
@@ -368,25 +342,35 @@ class PanoramaViewer(QMainWindow):
             self.view.setUrl(QUrl("about:blank"))
             return
 
-        url_field = self.cmb_panorama_url_field.currentText()
-        image_folder = self.file_widget_image_folder.filePath()
-
-        if not url_field or not image_folder:
-            QMessageBox.warning(self, "Atenção", "Selecione o campo de nome do arquivo e a pasta das imagens.")
-            return
-
+        # O nome da coluna é 'path', como vimos na sua imagem
+        url_field = "path"
         field_idx = self.current_panorama_layer.fields().indexFromName(url_field)
         
+        if field_idx == -1:
+            QMessageBox.critical(self, "Erro de Configuração", f"A coluna '{url_field}' não foi encontrada na camada de panoramas.")
+            return
+
         feature = selected_features[0]
-        image_filename = feature.attributes()[field_idx]
-        
-        full_image_path = os.path.join(image_folder, image_filename)
+        full_image_path = feature.attributes()[field_idx]
 
         if not os.path.exists(full_image_path):
-            QMessageBox.critical(self, "Erro", f"A imagem não foi encontrada no caminho:\n{full_image_path}")
+            QMessageBox.critical(self, "Erro", f"A imagem não foi encontrada no caminho especificado na tabela:\n{full_image_path}")
             return
             
         self._load_panorama_view(full_image_path)
+
+    def _load_panorama_view(self, image_path):
+        """
+        Copia a imagem local e a carrega no visualizador.
+        """
+        img_get = GetPanorama(self).get_pano_file(image_path, "copy")
+        
+        if img_get:
+            url = f"http://localhost:8030/index_local.html?v={datetime.datetime.now().timestamp()}"
+            self.view.load(QUrl(url))
+            self.view.load(QUrl(url))
+        else:
+            self.view.load(QUrl("http://localhost:8030/index_error.html"))
 
     def exibir_pontos_panorama(self):
         """
@@ -420,18 +404,3 @@ class PanoramaViewer(QMainWindow):
         QgsProject.instance().addMapLayer(self.current_layer)
         iface.mapCanvas().setExtent(self.current_layer.extent())
         iface.mapCanvas().refresh()
-
-    def visualizar_panorama_selecionado(self):
-        """
-        Exibe o panorama quando um ponto é selecionado no mapa.
-        """
-        layer = self.current_layer
-        if not layer or not isinstance(layer, QgsVectorLayer):
-            return
-
-        selected_features = layer.selectedFeatures()
-        if not selected_features:
-            self.view.setUrl(QUrl("about:blank"))
-            return
-
-        # Lógica para obter a URL da imagem e exibi-la
