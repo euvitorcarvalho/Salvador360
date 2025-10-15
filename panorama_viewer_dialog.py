@@ -288,17 +288,17 @@ class PanoramaViewer(QMainWindow):
         if not layer: return
         self.cmb_bairro_field.addItems([field.name() for field in layer.fields()])
 
-def popular_valores_bairro(self):
-    layer = self.cmb_bairro_layer.currentLayer()
-    field_name = self.cmb_bairro_field.currentText()
-    self.cmb_bairro_select.clear()
-    if not layer or not field_name: return
+    def popular_valores_bairro(self):
+        layer = self.cmb_bairro_layer.currentLayer()
+        field_name = self.cmb_bairro_field.currentText()
+        self.cmb_bairro_select.clear()
+        if not layer or not field_name: return
 
-    # Converte todos os valores para string para evitar o TypeError
-    unique_values_raw = layer.uniqueValues(layer.fields().indexFromName(field_name))
-    unique_values_str = {str(value) for value in unique_values_raw if value is not None}
+        # Converte todos os valores para string para evitar o TypeError
+        unique_values_raw = layer.uniqueValues(layer.fields().indexFromName(field_name))
+        unique_values_str = {str(value) for value in unique_values_raw if value is not None}
 
-    self.cmb_bairro_select.addItems(["-- Selecione um Bairro --"] + sorted(list(unique_values_str)))
+        self.cmb_bairro_select.addItems(["-- Selecione um Bairro --"] + sorted(list(unique_values_str)))
 
     def filtrar_pontos_no_bairro(self):
         bairro_layer = self.cmb_bairro_layer.currentLayer()
