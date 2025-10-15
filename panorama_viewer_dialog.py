@@ -283,14 +283,50 @@ class PanoramaViewer(QMainWindow):
 
     def carregar_logradouros(self):
         """
-        Filtra os logradouros com base no bairro selecionado.
+        Filtra os logradouros com base no bairro selecionado e popula o combobox de logradouros.
         """
         bairro_selecionado = self.cmb_bairro.currentText()
         if not bairro_selecionado:
+            self.cmb_logradouro.clear()
             return
 
-        # Lógica para carregar e filtrar a camada de logradouros
-        # (similar à função carregar_bairros, mas com filtro)
+        # Limpa camadas anteriores de logradouro
+        for layer in QgsProject.instance().mapLayers().values():
+            if layer.name() == "Logradouros do Bairro":
+                QgsProject.instance().removeMapLayer(layer)
+
+        # Carrega a camada de bairros para obter a geometria do bairro selecionado
+        uri_bairros = "http://geoserver.sedur.salvador.ba.gov.br:8080/geoserver/bairro_oficial/ows?SERVICE=WFS&REQUEST=GetCapabilities"
+        layer_bairros = QgsVectorLayer(uri_bairros, "Bairros", "WFS")
+        
+        # Filtra a camada de bairros
+        layer_bairros.setSubsetString(f"\"nome\" = '{bairro_selecionado}'")
+        
+        # Pega a geometria do bairro selecionado
+        feature_bairro = next(layer_bairros.getFeatures(), None)
+        if not feature_bairro:
+            return
+            
+        geom_bairro = feature_bairro.geometry()
+
+        # Carrega a camada de logradouros
+        uri_logradouros = "http://geoserver.sedur.salvador.ba.gov.br:8080/geoserver/logradouros/ows?"
+        layer_logradouros = QgsVectorLayer(uri_logradouros, "Logradouros do Bairro", "WFS")
+
+        if not layer_logradouros.isValid():
+            QMessageBox.critical(self, "Erro", "Não foi possível carregar a camada de logradouros.")
+            return
+
+        # Filtra os logradouros que estão dentro da geometria do bairro
+        request = QgsFeatureRequest().setFilterRect(geom_bairro.boundingBox())
+        logradouros_no_bairro = [f for f in layer_logradouros.getFeatures(request) if f.geometry().intersects(geom_bairro)]
+
+        self.cmb_logradouro.clear()
+        codlogs = sorted(list(set([str(f["cd_codlog"]) for f in logradouros_no_bairro])))
+        self.cmb_logradouro.addItems(codlogs)
+        
+        # Adiciona a camada de logradouros filtrados ao mapa (opcional)
+        # QgsProject.instance().addMapLayer(layer_logradouros)
 
     def exibir_pontos_panorama(self):
         """
