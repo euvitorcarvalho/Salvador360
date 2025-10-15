@@ -324,79 +324,111 @@ class PanoramaViewer(QMainWindow):
         self.httpd = HttpDaemon(self, base_folder)
         self.httpd.start()
 
-    def carregar_bairros(self):
-        """
-        Conecta ao WFS da camada de bairros e popula o combobox.
-        """
-        # URL com o typeName CORRETO extraído do XML
-        uri = "http://geoserver.sedur.salvador.ba.gov.br:8080/geoserver/bairro_oficial/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=bairro_oficial:VM_BAIRRO_OFICIAL"
-        self.layer_bairros = QgsVectorLayer(uri, "Bairros", "WFS")
+    def popular_campos_bairro(self, layer):
+        self.cmb_bairro_field.clear()
+        if not layer: return
+        self.cmb_bairro_field.addItems([field.name() for field in layer.fields()])
 
-        if not self.layer_bairros.isValid() or self.layer_bairros.featureCount() == 0:
-            QMessageBox.critical(self, "Erro de Conexão",
-                                "Não foi possível carregar a camada de bairros do serviço WFS.\n\n"
-                                "Verifique a URL e sua conexão com a internet.\n"
-                                f"URL tentada: {uri}")
-            return
+    def popular_campos_logradouro(self, layer):
+        self.cmb_logradouro_field.clear()
+        if not layer: return
+        self.cmb_logradouro_field.addItems([field.name() for field in layer.fields()])
 
-        field_name = "nome"  # Nome do campo que contém o nome do bairro
+    def popular_campos_panorama(self, layer):
+        self.cmb_panorama_codlog_field.clear()
+        self.cmb_panorama_url_field.clear()
+        if not layer: return
+        fields = [field.name() for field in layer.fields()]
+        self.cmb_panorama_codlog_field.addItems(fields)
+        self.cmb_panorama_url_field.addItems(fields)
 
-        self.cmb_bairro.clear()
+    def popular_valores_bairro(self):
+        layer = self.cmb_bairro_layer.currentLayer()
+        field_name = self.cmb_bairro_field.currentText()
+        self.cmb_bairro_select.clear()
+        if not layer or not field_name: return
+
+        unique_values = layer.uniqueValues(layer.fields().indexFromName(field_name))
+        self.cmb_bairro_select.addItems(sorted(list(unique_values)))
+
+    def popular_valores_logradouro(self):
+        bairro_layer = self.cmb_bairro_layer.currentLayer()
+        bairro_field = self.cmb_bairro_field.currentText()
+        bairro_selecionado = self.cmb_bairro_select.currentText()
         
-        try:
-            bairros_set = set(f[field_name] for f in self.layer_bairros.getFeatures())
-            bairros = sorted(list(bairros_set))
-            self.cmb_bairro.addItems(bairros)
-        except Exception as e:
-            QMessageBox.critical(self, "Erro ao ler dados",
-                                f"Não foi possível ler os nomes dos bairros. "
-                                f"Verifique se o campo '{field_name}' existe.\n\nErro: {e}")
+        logradouro_layer = self.cmb_logradouro_layer.currentLayer()
+        logradouro_codlog_field = self.cmb_logradouro_field.currentText()
 
-    def carregar_logradouros(self):
-        """
-        Filtra os logradouros com base no bairro selecionado, destaca o bairro no mapa e popula o combobox.
-        """
-        bairro_selecionado = self.cmb_bairro.currentText()
-        if not bairro_selecionado:
-            self.cmb_logradouro.clear()
-            return
-
-        # Limpa camadas e seleções anteriores
-        for layer in QgsProject.instance().mapLayers().values():
-            if layer.name() in ["Bairro Selecionado", "Logradouros do Bairro", "Pontos de Panorama"]:
-                QgsProject.instance().removeMapLayer(layer.id())
-        self.cmb_logradouro.clear()
-
-        # Adiciona e destaca o polígono do bairro selecionado usando o typeName correto
-        uri_bairros = f"http://geoserver.sedur.salvador.ba.gov.br:8080/geoserver/bairro_oficial/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=bairro_oficial:VM_BAIRRO_OFICIAL&cql_filter=\"nome\"='{bairro_selecionado}'"
-        layer_bairro_selecionado = QgsVectorLayer(uri_bairros, "Bairro Selecionado", "WFS")
+        self.cmb_logradouro_select.clear()
         
-        if layer_bairro_selecionado.isValid() and layer_bairro_selecionado.featureCount() > 0:
-            QgsProject.instance().addMapLayer(layer_bairro_selecionado)
-            iface.mapCanvas().setExtent(layer_bairro_selecionado.extent())
-            iface.mapCanvas().refresh()
-            geom_bairro = next(layer_bairro_selecionado.getFeatures()).geometry()
-        else:
-            QMessageBox.warning(self, "Atenção", "Não foi possível encontrar a geometria para o bairro selecionado.")
+        if not all([bairro_layer, bairro_field, bairro_selecionado, logradouro_layer, logradouro_codlog_field]):
             return
 
-        # Carrega os logradouros que intersectam a geometria do bairro
-        uri_logradouros = "http://geoserver.sedur.salvador.ba.gov.br:8080/geoserver/logradouros/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=logradouros:LOGRADOUROS_EIXO"
-        layer_logradouros = QgsVectorLayer(uri_logradouros, "Logradouros do Bairro (WFS)", "WFS")
+        # Filtra a camada de bairros para obter a geometria
+        bairro_layer.selectByExpression(f"\"{bairro_field}\" = '{bairro_selecionado}'")
+        feature_bairro = next(bairro_layer.getSelectedFeatures(), None)
+        bairro_layer.removeSelection()
+        
+        if not feature_bairro: return
+        geom_bairro = feature_bairro.geometry()
 
-        if not layer_logradouros.isValid():
-            QMessageBox.critical(self, "Erro", "Não foi possível carregar a camada de logradouros.")
-            return
-
+        # Filtra os logradouros que intersectam o bairro
         request = QgsFeatureRequest().setFilterRect(geom_bairro.boundingBox())
-        
         codlogs = set()
-        for f in layer_logradouros.getFeatures(request):
+        for f in logradouro_layer.getFeatures(request):
             if f.geometry().intersects(geom_bairro):
-                # Assumindo que o nome do campo é 'cd_codlog'
-                codlogs.add(str(f["cd_codlog"]))
+                codlogs.add(str(f[logradouro_codlog_field]))
         
-        self.cmb_logradouro.addItems(sorted(list(codlogs)))
+        self.cmb_logradouro_select.addItems(sorted(list(codlogs)))
+
+    def filtrar_e_exibir_pontos(self):
+        logradouro_selecionado = self.cmb_logradouro_select.currentText()
+        panorama_layer = self.cmb_panorama_layer.currentLayer()
+        panorama_codlog_field = self.cmb_panorama_codlog_field.currentText()
+
+        if not all([logradouro_selecionado, panorama_layer, panorama_codlog_field]):
+            QMessageBox.warning(self, "Atenção", "Preencha todos os campos de camada e filtro.")
+            return
+        
+        # Define a camada atual de panoramas para o evento de seleção
+        self.current_panorama_layer = panorama_layer
+
+        # Aplica o filtro na camada de panoramas
+        filter_expression = f"\"{panorama_codlog_field}\" = '{logradouro_selecionado}'"
+        panorama_layer.setSubsetString(filter_expression)
+        
+        iface.mapCanvas().setExtent(panorama_layer.extent())
+        iface.mapCanvas().refresh()
+
+    def visualizar_panorama_selecionado(self):
+        # Esta função é acionada por qualquer mudança de seleção no mapa
+        if not self.current_panorama_layer:
+            return
+
+        selected_features = self.current_panorama_layer.selectedFeatures()
+        if not selected_features:
+            self.view.setUrl(QUrl("about:blank"))
+            return
+
+        url_field = self.cmb_panorama_url_field.currentText()
+        image_folder = self.file_widget_image_folder.filePath()
+
+        if not url_field or not image_folder:
+            QMessageBox.warning(self, "Atenção", "Selecione o campo de nome do arquivo e a pasta das imagens.")
+            return
+
+        field_idx = self.current_panorama_layer.fields().indexFromName(url_field)
+        
+        feature = selected_features[0]
+        image_filename = feature.attributes()[field_idx]
+        
+        full_image_path = os.path.join(image_folder, image_filename)
+
+        if not os.path.exists(full_image_path):
+            QMessageBox.critical(self, "Erro", f"A imagem não foi encontrada no caminho:\n{full_image_path}")
+            return
+            
+        self._load_panorama_view(full_image_path)
 
     def exibir_pontos_panorama(self):
         """
