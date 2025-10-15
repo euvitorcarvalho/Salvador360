@@ -308,13 +308,13 @@ class PanoramaViewer(QMainWindow):
         panorama_layer = self.cmb_panorama_layer.currentLayer()
 
         if not all([bairro_layer, bairro_field, panorama_layer]) or bairro_nome == "-- Selecione um Bairro --":
+            if panorama_layer:
+                panorama_layer.setSubsetString("") # Limpa o filtro se o usuário des-selecionar o bairro
             QMessageBox.warning(self, "Atenção", "Por favor, selecione todas as camadas e um bairro para filtrar.")
             return
             
         self.current_panorama_layer = panorama_layer
-
-        # Limpa filtros anteriores da camada de panorama
-        panorama_layer.setSubsetString("")
+        panorama_layer.setSubsetString("") # Limpa qualquer filtro anterior
 
         # Encontra a geometria do bairro selecionado
         request = QgsFeatureRequest().setFilterExpression(f"\"{bairro_field}\" = '{bairro_nome}'")
@@ -326,32 +326,32 @@ class PanoramaViewer(QMainWindow):
         
         geom_bairro = feature_bairro.geometry()
 
-        # --- INÍCIO DA CORREÇÃO ---
-        # Em vez de usar uma string de filtro, vamos selecionar as feições
-        
-        # Primeiro, otimizamos a busca usando o bounding box do bairro
+        # Otimiza a busca usando o bounding box do bairro
         request_pontos = QgsFeatureRequest().setFilterRect(geom_bairro.boundingBox())
         
         ids_para_filtrar = []
-        # Agora, iteramos sobre as feições pré-filtradas para fazer a verificação precisa
         for feature_ponto in panorama_layer.getFeatures(request_pontos):
             if feature_ponto.geometry().intersects(geom_bairro):
                 ids_para_filtrar.append(feature_ponto.id())
         
         if not ids_para_filtrar:
             QMessageBox.information(self, "Resultado", f"Nenhum ponto de panorama encontrado no bairro '{bairro_nome}'.")
-            panorama_layer.setSubsetString('"fid" = -1') # Esconde todas as feições
+            # Aplica um filtro que não seleciona nada
+            panorama_layer.setSubsetString('$id = -1')
             return
 
-        # Constrói a expressão de filtro final usando os IDs das feições encontradas
-        filter_expression = '"fid" IN ({})'.format(','.join(map(str, ids_para_filtrar)))
+        # Constrói a expressão de filtro usando $id, que é a referência correta para o feature ID
+        filter_expression = '$id IN ({})'.format(','.join(map(str, ids_para_filtrar)))
         panorama_layer.setSubsetString(filter_expression)
-        
         
         iface.mapCanvas().setExtent(panorama_layer.extent())
         iface.mapCanvas().refresh()
 
-    def visualizar_panorama_selecionado(self):
+    def visualizar_panorama_selecionado(self, layer=None): 
+    
+        if layer and self.current_panorama_layer and layer.id() != self.current_panorama_layer.id():
+            return
+
         if not self.current_panorama_layer:
             return
 
@@ -360,7 +360,7 @@ class PanoramaViewer(QMainWindow):
             self.view.setUrl(QUrl("about:blank"))
             return
 
-        # O nome da coluna é 'path', como vimos na sua imagem
+        # O nome da coluna é 'path'
         url_field = "path"
         field_idx = self.current_panorama_layer.fields().indexFromName(url_field)
         
