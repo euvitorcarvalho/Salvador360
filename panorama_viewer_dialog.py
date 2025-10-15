@@ -310,6 +310,9 @@ class PanoramaViewer(QMainWindow):
             
         self.current_panorama_layer = panorama_layer
 
+        # Limpa filtros anteriores da camada de panorama
+        panorama_layer.setSubsetString("")
+
         # Encontra a geometria do bairro selecionado
         request = QgsFeatureRequest().setFilterExpression(f"\"{bairro_field}\" = '{bairro_nome}'")
         feature_bairro = next(bairro_layer.getFeatures(request), None)
@@ -319,16 +322,29 @@ class PanoramaViewer(QMainWindow):
             return
         
         geom_bairro = feature_bairro.geometry()
-        geom_wkt = geom_bairro.asWkt() # Converte a geometria para texto (WKT)
 
-        # Cria a expressão de filtro espacial
-        filter_expression = f"intersects($geometry, geom_from_wkt('{geom_wkt}'))"
+        # --- INÍCIO DA CORREÇÃO ---
+        # Em vez de usar uma string de filtro, vamos selecionar as feições
         
-        # Aplica o filtro na camada de panoramas
+        # Primeiro, otimizamos a busca usando o bounding box do bairro
+        request_pontos = QgsFeatureRequest().setFilterRect(geom_bairro.boundingBox())
+        
+        ids_para_filtrar = []
+        # Agora, iteramos sobre as feições pré-filtradas para fazer a verificação precisa
+        for feature_ponto in panorama_layer.getFeatures(request_pontos):
+            if feature_ponto.geometry().intersects(geom_bairro):
+                ids_para_filtrar.append(feature_ponto.id())
+        
+        if not ids_para_filtrar:
+            QMessageBox.information(self, "Resultado", f"Nenhum ponto de panorama encontrado no bairro '{bairro_nome}'.")
+            panorama_layer.setSubsetString('"fid" = -1') # Esconde todas as feições
+            return
+
+        # Constrói a expressão de filtro final usando os IDs das feições encontradas
+        filter_expression = '"fid" IN ({})'.format(','.join(map(str, ids_para_filtrar)))
         panorama_layer.setSubsetString(filter_expression)
         
-        if panorama_layer.featureCount() == 0:
-            QMessageBox.information(self, "Resultado", f"Nenhum ponto de panorama encontrado no bairro '{bairro_nome}'.")
+        # --- FIM DA CORREÇÃO ---
         
         iface.mapCanvas().setExtent(panorama_layer.extent())
         iface.mapCanvas().refresh()
