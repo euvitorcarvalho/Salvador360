@@ -33,7 +33,6 @@ from qgis.utils import iface
 from qgis._core import *
 from qgis._gui import *
 
-from qgis.core import QgsPointXY, QgsGeometry
 from PyQt5.QtCore import QThread, QSize
 
 
@@ -64,7 +63,8 @@ format = QSurfaceFormat()
 format.setProfile(QSurfaceFormat.CompatibilityProfile)
 QSurfaceFormat.setDefaultFormat(format)
 
-from qgis.core import QgsVectorLayer, QgsProject, QgsFeatureRequest
+from qgis.gui import QgsMapLayerComboBox, QgsFileWidget
+from qgis.core import QgsVectorLayer, QgsProject, QgsFeatureRequest, QgsPointXY, QgsGeometry, QgsProject, QgsVectorLayer, QgsMapLayerProxyModel
 from PyQt5.QtWidgets import QLineEdit
 from PyQt5.QtCore import QUrl
 import requests
@@ -202,6 +202,7 @@ class WebPage(QWebPage):
 
 
 class PanoramaViewer(QMainWindow):
+    # Substitua a função __init__ inteira por esta:
     def __init__(self, parent):
         super().__init__(parent=None)
         
@@ -211,15 +212,15 @@ class PanoramaViewer(QMainWindow):
         self.setGeometry(800, 650, 1200, 880)
 
         self.httpd = None
-        self.current_layer = None
+        self.current_panorama_layer = None # Camada de panorama atualmente filtrada
 
         centralWidget = QWidget()
+        main_layout = QVBoxLayout(centralWidget)
         browser_layout = QHBoxLayout()
-        centralLayout = QVBoxLayout()
-        control_layout = QVBoxLayout()
-        grid_layout = QGridLayout(self)
+        grid_layout = QGridLayout()
         grid_layout.setSpacing(10)
 
+        # --- Visualizador de Panorama ---
         self.view = QWebView(self)
         sp = self.view.sizePolicy()
         sp.setVerticalPolicy(QSizePolicy.Expanding)
@@ -227,39 +228,96 @@ class PanoramaViewer(QMainWindow):
         self.view.settings().setObjectCacheCapacities(0, 0, 0)
         self.page = WebPage(self)
         self.view.setPage(self.page)
+        browser_layout.addWidget(self.view)
 
-        self.lbl_bairro = QLabel("Bairro:")
-        self.cmb_bairro = QComboBox()
-        self.cmb_bairro.setEditable(True)
+        # --- Seleção de Camadas e Campos ---
+        # Camada de Bairros
+        self.lbl_bairro_layer = QLabel("Camada de Bairros:")
+        self.cmb_bairro_layer = QgsMapLayerComboBox(self)
+        self.cmb_bairro_layer.setFilters(QgsMapLayerProxyModel.PolygonLayer)
 
-        self.lbl_logradouro = QLabel("Logradouro (Codlog):")
-        self.cmb_logradouro = QComboBox()
-        self.cmb_logradouro.setEditable(True)
+        self.lbl_bairro_field = QLabel("Campo 'Nome do Bairro':")
+        self.cmb_bairro_field = QComboBox(self)
 
-        self.btn_exibir_pontos = QPushButton("Exibir pontos de panorama")
-        self.pbar = QProgressBar()
+        # Camada de Logradouros
+        self.lbl_logradouro_layer = QLabel("Camada de Logradouros:")
+        self.cmb_logradouro_layer = QgsMapLayerComboBox(self)
+        self.cmb_logradouro_layer.setFilters(QgsMapLayerProxyModel.LineLayer)
+
+        self.lbl_logradouro_field = QLabel("Campo 'Codlog':")
+        self.cmb_logradouro_field = QComboBox(self)
+
+        # Camada de Panoramas
+        self.lbl_panorama_layer = QLabel("Camada de Panoramas:")
+        self.cmb_panorama_layer = QgsMapLayerComboBox(self)
+        self.cmb_panorama_layer.setFilters(QgsMapLayerProxyModel.PointLayer)
+        
+        self.lbl_panorama_codlog_field = QLabel("Campo 'Codlog' do Panorama:")
+        self.cmb_panorama_codlog_field = QComboBox(self)
+
+        self.lbl_panorama_url_field = QLabel("Campo 'URL/Nome do Arquivo':")
+        self.cmb_panorama_url_field = QComboBox(self)
+        
+        # Pasta de Imagens
+        self.lbl_image_folder = QLabel("Pasta das Imagens Panorâmicas:")
+        self.file_widget_image_folder = QgsFileWidget(self)
+        self.file_widget_image_folder.setStorageMode(QgsFileWidget.StorageMode.SelectFolder)
+
+        # --- Filtros ---
+        self.lbl_bairro_select = QLabel("Selecione o Bairro:")
+        self.cmb_bairro_select = QComboBox(self)
+        
+        self.lbl_logradouro_select = QLabel("Selecione o Logradouro (Codlog):")
+        self.cmb_logradouro_select = QComboBox(self)
+
+        # --- Botões e Controles ---
+        self.btn_filtrar = QPushButton("Filtrar e Exibir Pontos")
+        self.pbar = QProgressBar(self)
         self.pbar.setDisabled(True)
 
-        browser_layout.addWidget(self.view)
+        # --- Montagem do Layout ---
+        grid_layout.addWidget(self.lbl_bairro_layer, 0, 0)
+        grid_layout.addWidget(self.cmb_bairro_layer, 0, 1)
+        grid_layout.addWidget(self.lbl_bairro_field, 0, 2)
+        grid_layout.addWidget(self.cmb_bairro_field, 0, 3)
+
+        grid_layout.addWidget(self.lbl_logradouro_layer, 1, 0)
+        grid_layout.addWidget(self.cmb_logradouro_layer, 1, 1)
+        grid_layout.addWidget(self.lbl_logradouro_field, 1, 2)
+        grid_layout.addWidget(self.cmb_logradouro_field, 1, 3)
+
+        grid_layout.addWidget(self.lbl_panorama_layer, 2, 0)
+        grid_layout.addWidget(self.cmb_panorama_layer, 2, 1)
+        grid_layout.addWidget(self.lbl_panorama_codlog_field, 2, 2)
+        grid_layout.addWidget(self.cmb_panorama_codlog_field, 2, 3)
         
-        grid_layout.addWidget(self.lbl_bairro, 1, 0)
-        grid_layout.addWidget(self.cmb_bairro, 1, 1)
-        grid_layout.addWidget(self.lbl_logradouro, 1, 2)
-        grid_layout.addWidget(self.cmb_logradouro, 1, 3)
+        grid_layout.addWidget(self.lbl_panorama_url_field, 3, 2)
+        grid_layout.addWidget(self.cmb_panorama_url_field, 3, 3)
 
-        control_layout.addWidget(self.btn_exibir_pontos)
-        control_layout.addWidget(self.pbar)
+        grid_layout.addWidget(self.lbl_image_folder, 4, 0, 1, 4)
+        grid_layout.addWidget(self.file_widget_image_folder, 5, 0, 1, 4)
 
-        centralLayout.addLayout(browser_layout)
-        centralLayout.addLayout(grid_layout)
-        centralLayout.addLayout(control_layout)
-        centralWidget.setLayout(centralLayout)
+        grid_layout.addWidget(self.lbl_bairro_select, 6, 0)
+        grid_layout.addWidget(self.cmb_bairro_select, 6, 1)
+        grid_layout.addWidget(self.lbl_logradouro_select, 6, 2)
+        grid_layout.addWidget(self.cmb_logradouro_select, 6, 3)
+
+        main_layout.addLayout(browser_layout)
+        main_layout.addLayout(grid_layout)
+        main_layout.addWidget(self.btn_filtrar)
+        main_layout.addWidget(self.pbar)
+        
         self.setCentralWidget(centralWidget)
 
-        self.btn_exibir_pontos.clicked.connect(self.exibir_pontos_panorama)
-        self.cmb_bairro.currentIndexChanged.connect(self.carregar_logradouros)
+        # --- Conexões (Sinais e Slots) ---
+        self.cmb_bairro_layer.layerChanged.connect(self.popular_campos_bairro)
+        self.cmb_logradouro_layer.layerChanged.connect(self.popular_campos_logradouro)
+        self.cmb_panorama_layer.layerChanged.connect(self.popular_campos_panorama)
+        
+        self.cmb_bairro_field.currentIndexChanged.connect(self.popular_valores_bairro)
+        self.cmb_bairro_select.currentIndexChanged.connect(self.popular_valores_logradouro)
 
-        self.carregar_bairros()
+        self.btn_filtrar.clicked.connect(self.filtrar_e_exibir_pontos)
         
         iface.mapCanvas().selectionChanged.connect(self.visualizar_panorama_selecionado)
 
