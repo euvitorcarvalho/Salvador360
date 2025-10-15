@@ -184,10 +184,12 @@ class PanoramaViewerDialog(QDockWidget):
 
     def onDestroy(self, e):
         self.wrapper.plugin_is_opened = False
-        self.gv.reset_tr()
-        iface.mapCanvas().selectionChanged.disconnect(self.gv.get_pic_on_selection)
-        if self.gv.rubberBandArrow:
-            self.gv.rubberBandArrow.reset()
+        if self.gv.httpd:
+            self.gv.httpd.stop()
+        try:
+            iface.mapCanvas().selectionChanged.disconnect(self.gv.visualizar_panorama_selecionado)
+        except TypeError:
+            pass
 
 
 class WebPage(QWebPage):
