@@ -5,7 +5,7 @@
 [general]
 name=Salvador 360°
 qgisMinimumVersion=3.0
-description=Visualizador de panoramas 360° para Salvador
+description=Salvador 360° é uma fork do plugin Panorama Viewer para visualizar panoramas 360° para Salvador
 version=1.0
 author=Pavel Pereverzev
 email=pasha004@yandex.ru
