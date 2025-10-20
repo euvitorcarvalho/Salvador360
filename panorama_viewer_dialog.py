@@ -174,8 +174,8 @@ class PanoramaViewer(QMainWindow):
 
         # Layout dos botões de adicionar camadas
         add_layers_layout = QHBoxLayout()
-        self.btn_add_bairros = QPushButton("Carregar Bairros (SEDUR)")
         self.btn_add_ortoimagem = QPushButton("Carregar Ortoimagem (WMS)")
+        self.btn_add_bairros = QPushButton("Carregar Bairros (SEDUR)")
         self.btn_add_logradouros = QPushButton("Carregar Logradouros (SEDUR)")
         self.btn_add_pontos = QPushButton("Adicionar Camada de Pontos (SHP)")
         add_layers_layout.addWidget(self.btn_add_bairros)
@@ -225,8 +225,8 @@ class PanoramaViewer(QMainWindow):
         self.setCentralWidget(centralWidget)
 
         # --- Conexões (Sinais e Slots) ---
-        self.btn_add_bairros.clicked.connect(self.add_bairros_layer)
         self.btn_add_ortoimagem.clicked.connect(self.add_ortoimagem_layer)
+        self.btn_add_bairros.clicked.connect(self.add_bairros_layer)
         self.btn_add_logradouros.clicked.connect(self.add_logradouros_layer)
         self.btn_add_pontos.clicked.connect(self.add_pontos_layer)
         
