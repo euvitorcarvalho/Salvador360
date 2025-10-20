@@ -178,8 +178,8 @@ class PanoramaViewer(QMainWindow):
         self.btn_add_bairros = QPushButton("Carregar Bairros (SEDUR)")
         self.btn_add_logradouros = QPushButton("Carregar Logradouros (SEDUR)")
         self.btn_add_pontos = QPushButton("Adicionar Camada de Pontos (SHP)")
-        add_layers_layout.addWidget(self.btn_add_bairros)
         add_layers_layout.addWidget(self.btn_add_ortoimagem)
+        add_layers_layout.addWidget(self.btn_add_bairros)
         add_layers_layout.addWidget(self.btn_add_logradouros)
         add_layers_layout.addWidget(self.btn_add_pontos)
 
