@@ -196,7 +196,7 @@ class PanoramaViewer(QMainWindow):
 
         # Layout dos filtros (Comboboxes)
         grid_layout = QGridLayout()
-        self.lbl_bairro_field = QLabel("Campo 'Nome do Bairro':")
+        self.lbl_bairro_field = QLabel("Campo 'Nome p Bairro':")
         self.cmb_bairro_field = QComboBox(self) # Seleciona o CAMPO (ex: "nome")
 
         self.lbl_bairro_select = QLabel("1. Selecione o Bairro:")
@@ -387,6 +387,10 @@ class PanoramaViewer(QMainWindow):
         
         if not feature_bairro: return
         geom_bairro = feature_bairro.geometry()
+
+        # Dá zoom na extensão do bairro selecionado
+        iface.mapCanvas().setExtent(geom_bairro.boundingBox())
+        iface.mapCanvas().refresh()
 
         # --- Filtro Espacial ---
         # Cria uma requisição otimizada usando a Bounding Box do bairro
