@@ -87,37 +87,61 @@ class GetPanorama(QWidget):
         return False
 
     def copy_file(self, file_in):
-        # Esta função copia o panorama (que pode estar em rede) 
-        # para a pasta local do plugin com o nome 'image.JPG'.
-        # Isso é necessário para que o servidor web local possa acessá-lo.
-        self.main_app.pbar.setDisabled(False) # Ativa a barra de progresso
+        self.main_app.pbar.setDisabled(False)
         file_out = os.path.join(base_folder, "image.JPG")
+        f_in = None
+        f_out = None
+        success = False
         try:
             file_stats = os.stat(file_in)
             size_b = file_stats.st_size
-            chunk_size = 4096 # Lê o arquivo em pedaços de 4KB
-            # Calcula o incremento da barra de progresso
-            p_step = 100 / (size_b / chunk_size) if size_b > 0 else 0
+            chunk_size = 4096
+            p_step = 100 / (size_b / chunk_size) if size_b > chunk_size else 100 # Ajuste para arquivos pequenos
             counter = 0
-            # Abre o arquivo de origem (leitura binária) e destino (escrita binária)
-            with open(file_in, "rb") as f_in, open(file_out, "wb") as f_out:
-                while True:
-                    piece = f_in.read(chunk_size)
-                    if not piece:
-                        break # Terminou de ler
-                    f_out.write(piece)
-                    counter += p_step
-                    # Atualiza a barra de progresso e processa eventos da interface
-                    self.main_app.pbar.setValue(int(counter))
-                    QtCore.QCoreApplication.processEvents()
-            self.main_app.pbar.setValue(100) # Garante que chegou a 100%
+
+            # Abre os arquivos fora do loop with para garantir o fechamento no finally
+            f_in = open(file_in, "rb")
+            # Tenta apagar o antigo antes de escrever
+            if os.path.exists(file_out):
+                try:
+                    os.remove(file_out)
+                except OSError as e:
+                    print(f"AVISO: Não foi possível remover o image.JPG antigo: {e}")
+            f_out = open(file_out, "wb")
+
+            while True:
+                piece = f_in.read(chunk_size)
+                if not piece:
+                    break
+                f_out.write(piece)
+                # Atualiza a barra de progresso de forma mais controlada
+                if size_b > 0:
+                     current_pos = f_in.tell()
+                     counter = (current_pos / size_b) * 100
+                else: # Caso de arquivo vazio
+                    counter = 100
+                self.main_app.pbar.setValue(int(counter))
+                QtCore.QCoreApplication.processEvents()
+
+            self.main_app.pbar.setValue(100)
+            success = True # Marca como sucesso apenas se chegou ao fim
+            print(f"Arquivo copiado com sucesso: {file_in} -> {file_out}") # Log de sucesso
             return True
+
         except Exception as e:
-            QMessageBox.critical(self.main_app, "Erro", f"Erro ao copiar o arquivo de imagem:\n{e}")
+            error_msg = f"Erro detalhado ao copiar o arquivo:\nOrigem: {file_in}\nDestino: {file_out}\nErro: {e}"
+            print(error_msg) # Imprime erro detalhado no log do QGIS
+            QMessageBox.critical(self.main_app, "Erro de Cópia", error_msg)
             return False
         finally:
-            # Reseta e desativa a barra de progresso, independente de sucesso or falha
-            self.main_app.pbar.setValue(0)
+            # Garante que os arquivos sejam fechados mesmo se ocorrer erro
+            if f_in:
+                f_in.close()
+            if f_out:
+                f_out.close()
+            # Reseta a barra de progresso apenas no final
+            if not success: # Se não teve sucesso, garante que a barra zere
+                 self.main_app.pbar.setValue(0)
             self.main_app.pbar.setDisabled(True)
 
 # --- Janela Principal (DockWidget) ---
@@ -473,14 +497,22 @@ class PanoramaViewer(QMainWindow):
         self._load_panorama_view(full_image_path)
 
     def _load_panorama_view(self, image_path):
-        # 1. Copia o arquivo de imagem para a pasta local (e mostra a barra de progresso)
         img_get = GetPanorama(self).get_pano_file(image_path, "copy")
-        
+
         if img_get:
-            # 2. Carrega o 'index_local.html' usando o servidor local
-            # O 'time()' é adicionado para evitar problemas de cache do navegador
-            url = f"http://localhost:{PORT}/index_local.html?v={time()}"
-            self.view.load(QUrl(url))
+            # Limpa o cache de rede e de disco do QWebView
+            self.view.page().networkAccessManager().clearAccessCache()
+            self.view.page().networkAccessManager().clearDiskCache()
+            
+            # Adiciona um pequeno delay (200ms) para dar tempo ao sistema de arquivos
+            QtCore.QTimer.singleShot(200, self._load_url_after_delay)
         else:
-            # Se a cópia falhar, carrega uma página de erro
+            # Se a cópia falhou (a função copy_file retornou False), carrega a página de erro
             self.view.load(QUrl(f"http://localhost:{PORT}/index_error.html"))
+
+    def _load_url_after_delay(self):
+        """Função auxiliar chamada após o delay para carregar a URL."""
+        # Adiciona timestamp para tentar evitar cache
+        url = f"http://localhost:{PORT}/index_local.html?v={time()}"
+        self.view.load(QUrl(url))
+        print(f"QWebView carregando URL: {url}") # Log para confirmar
