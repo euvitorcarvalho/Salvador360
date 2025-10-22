@@ -502,7 +502,6 @@ class PanoramaViewer(QMainWindow):
         if img_get:
             # Limpa o cache de rede e de disco do QWebView
             self.view.page().networkAccessManager().clearAccessCache()
-            self.view.page().networkAccessManager().clearDiskCache()
             
             # Adiciona um pequeno delay (200ms) para dar tempo ao sistema de arquivos
             QtCore.QTimer.singleShot(200, self._load_url_after_delay)
